@@ -40,7 +40,7 @@ class DeltaGrad(Optimizer):
                     
                 if p.grad is None:
                     continue
-
+                
                 # 1. Obter o gradiente atual (Ruidoso)
                 # No PyTorch, o gradiente está em: p.grad.data
                 grad = p.grad.data
@@ -92,8 +92,11 @@ class DeltaGrad(Optimizer):
                     R = torch.ones_like(smooth)
                     grad_inertia = smooth.clone()
 
+
+                state['R'] = R.detach()
                 history.append(smooth.clone().detach())
 
+                
                 if len(history) > K:
                     history.pop(0)
 

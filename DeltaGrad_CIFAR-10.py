@@ -6,7 +6,7 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import time
 from DeltaGrad import DeltaGrad
-
+from visualizations import get_grad_variance
 
 #Compose: composes several transforms, so the images can be fed to the NN
 transform = transforms.Compose([
@@ -18,10 +18,10 @@ transform = transforms.Compose([
 ])
 
 #Loading dataset
-trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
 
-testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
 testloader = torch.utils.data.DataLoader(testset, batch_size=1000, shuffle=False, num_workers=2)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -45,7 +45,7 @@ class ConvNet(nn.Module):
         # Classificação
         self.flatten = nn.Flatten()
         self.fc1 = nn.Linear(64 * 4 * 4, 64)
-        self.fc2 = nn.Linear(64, 10)
+        self.fc2 = nn.Linear(64, 100)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -57,38 +57,28 @@ class ConvNet(nn.Module):
         x = self.fc2(x)
         return x
 
-# Função de Treino Reutilizável
 def train_model(optimizer_name, learning_rate, epochs=10):
-    
     print(f"\n🥊 A iniciar treino com {optimizer_name} (LR={learning_rate})...")
     model = ConvNet().to(device)
     criterion = nn.CrossEntropyLoss()
     
     if optimizer_name == "DeltaGrad":
-        # HIperparâmetros "Seguros" para CNN
-        optimizer = DeltaGrad(model.parameters(), lr=learning_rate, gamma=0.8, K=4, alpha=0.8, smoothing =0.95)
+        optimizer = DeltaGrad(model.parameters(), lr=learning_rate, gamma=0.8, K=4, alpha=0.8, smoothing=0.95)
     elif optimizer_name == "Adam":
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate) # Adam default geralmente é 0.001
-        
-    history_loss = []
-    history_acc = []
-    smooth_decay = 0.1
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    # Listas para o Método 3
+    r_values = []
+    variance_values = []
+    avg_R = 0.0
+    n_params = 0
+    running_loss = 0.0
+    correct = 0
+    total = 0   
     start_time = time.time()
     
     for epoch in range(epochs):
-        #current_smooth = optimizer.param_groups[0]['smoothing']
-        #new_smooth = max(0.0, current_smooth * smooth_decay)
-        running_loss = 0.0
-        correct = 0
-        total = 0
-        
         model.train()
-        '''
-        if epoch == 10: # A meio do caminho
-            print("--- A MUDAR DE MUDANÇA (LR 0.25 -> 0.025) ---")
-            optimizer.param_groups[0]['lr'] = 0.025
-        '''
-
         for i, (inputs, labels) in enumerate(trainloader):
             inputs, labels = inputs.to(device), labels.to(device)
             
@@ -96,28 +86,66 @@ def train_model(optimizer_name, learning_rate, epochs=10):
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
+
+                # --- MÉTODO 3: DEBUG ---
+            if optimizer_name == "DeltaGrad" and i % 50 == 0:
+                var_real = get_grad_variance(model, criterion, inputs, labels)
+                
+                found_r = False
+                for group in optimizer.param_groups:
+                    for p in group['params']:
+                        state = optimizer.state[p]
+                        # PRINT DE DEBUG:
+                        # print(f"Keys no state: {state.keys()}") 
+                        if 'R' in state:
+                            avg_R += state['R'].mean().item()
+                            n_params += 1
+                            found_r = True
             
-            # Clip global para justiça
+                if found_r:
+                    r_values.append(avg_R / n_params)
+                    variance_values.append(var_real)
+                else:
+                    print(f"Aviso: Batch {i} - Otimizador não encontrou a chave 'R' no state!")
+
+
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            
             optimizer.step()
-            
+
             running_loss += loss.item()
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
             
+
         epoch_loss = running_loss / len(trainloader)
         epoch_acc = 100 * correct / total
-        history_loss.append(epoch_loss)
-        history_acc.append(epoch_acc)
-        #optimizer.param_groups[0]['smoothing'] = new_smooth
-        #print(f"Época {epoch+1} | Smoothing atual: {new_smooth:.4f}")
         
+
         print(f"[{optimizer_name}] Época {epoch+1}/{epochs} | Loss: {epoch_loss:.4f} | Acc: {epoch_acc:.2f}%")
+
+    if optimizer_name == "DeltaGrad" and len(r_values) > 0:
+        plt.figure(figsize=(10, 6))
+        plt.scatter(r_values, variance_values, alpha=0.6, c=variance_values, cmap='viridis', edgecolors='k')
         
-    duration = time.time() - start_time
-    print(f"⏱️ Tempo total: {duration:.1f}s")
+        plt.title("DeltaGrad: R vs Gradient Variance", fontsize=14)
+        plt.xlabel("Metric R (Network Average)", fontsize=12)
+        plt.ylabel("Real Gradient Variance", fontsize=12)
+        plt.grid(True, linestyle='--', alpha=0.5)
+        
+        # 1. Guardar para o Overleaf (PDF é o melhor para LaTeX)
+        plt.savefig("metodo3_deltagrad.pdf", bbox_inches='tight')
+        
+        # 2. Guardar em PNG para veres rápido no PC
+        plt.savefig("metodo3_deltagrad.png", dpi=300, bbox_inches='tight')
+        
+        print("✅ Gráficos guardados como 'metodo3_deltagrad.pdf' e '.png'")
+        plt.show()
+
+    return r_values, variance_values
 
 
-train_model("Adam", 0.25, epochs=10)
+
+
+# Executar
+r_data, var_data = train_model("DeltaGrad", 0.25, epochs=10)
