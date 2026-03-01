@@ -2,8 +2,6 @@ import torch
 from torch.optim import Optimizer
 
 class DeltaGrad(Optimizer):
-
-    
     def __init__(self, 
                 params, 
                 lr=0.01,
@@ -11,118 +9,109 @@ class DeltaGrad(Optimizer):
                 K=4, 
                 alpha=0.1,
                 beta=0.9, 
-                smoothing = 0.9,
+                smoothing=0.9,
+                weight_decay=0,
                 epsilon=1e-8):
         
+        if lr < 0.0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        if not 0.0 <= beta < 1.0:
+            raise ValueError(f"Invalid beta parameter: {beta}")
+        
         defaults = dict(lr=lr, gamma=gamma, alpha=alpha, 
-                        beta=beta, K=K, smoothing=smoothing, epsilon=epsilon)
+                        beta=beta, K=K, smoothing=smoothing, 
+                        weight_decay=weight_decay, epsilon=epsilon)
         
         super(DeltaGrad, self).__init__(params, defaults)
-        
-    def step(self, closure=None):
 
+    @torch.no_grad()
+    def step(self, closure=None):
         loss = None
         if closure is not None:
-            loss = closure()
+            with torch.enable_grad():
+                loss = closure()
 
         for group in self.param_groups:
-            
-            
+            # Hyperparameters
             eta = group['lr']
             gamma = group['gamma']
             alpha = group['alpha']
             beta = group['beta']
             K = group['K']
             smooth_factor = group['smoothing']
+            weight_decay = group['weight_decay']
             eps = group['epsilon']
 
+            # Pre-calculate exponential weights for vectorized history
+            # This replaces the manual 'for j' loop
+            alpha_weights = torch.tensor([alpha**i for i in range(K)], device=group['params'][0].device)
+            beta_weights = torch.tensor([beta**(i+1) for i in range(K)], device=group['params'][0].device)
+
             for p in group['params']:
-                    
                 if p.grad is None:
                     continue
                 
-                # 1. Obter o gradiente atual (Ruidoso)
-                # No PyTorch, o gradiente está em: p.grad.data
-                grad = p.grad.data
-
-                # 2. Aceder ao "Estado" (Memória) deste peso específico
+                grad = p.grad
                 state = self.state[p]
 
-                # --- INICIALIZAÇÃO (Só corre na 1ª vez) ---
+                # Initialization
                 if len(state) == 0:
                     state['step'] = 0
-                    state['smooth_grad'] = torch.zeros_like(p.data)
-                    state['smooth_grad'].copy_(grad)
-
-                    state['grad_history'] = []
+                    state['smooth_grad'] = grad.clone()
+                    state['grad_history'] = [] # Stores up to K past smoothed gradients
                     
                 state['step'] += 1
-                
-                history = state['grad_history']
                 smooth = state['smooth_grad']
-                
-                R_sum = 0
-                grad_inertia_num = 0 
-                grad_inertia_den = 0
-                cur_k = len(history)
+                history = state['grad_history']
 
+                # Apply Weight Decay (L2 Regularization)
+                if weight_decay != 0:
+                    grad = grad.add(p, alpha=weight_decay)
+
+                # Update smoothed gradient (EMA)
                 if state['step'] > 1:
-                    smooth.mul_(smooth_factor).add_(grad, alpha=(1-smooth_factor))
+                    smooth.mul_(smooth_factor).add_(grad, alpha=(1 - smooth_factor))
 
+                cur_k = len(history)
                 if cur_k > 0:
-
-                    for j in range(1, cur_k+1):
-
-                        g_prev = history[-j]
-                        diff = smooth - g_prev
-                        sum = smooth.abs() + g_prev.abs() + eps
-                        term = (alpha**(j-1)) * diff.abs() / sum
-                        R_sum = R_sum + term
-
-                        grad_inertia_num += (beta**j)*g_prev
-                        grad_inertia_den += beta**j
-
+                    # Vectorized computation of R and Inertia
+                    # 1. Stack history into a single tensor [K, parameters_shape]
+                    history_tensor = torch.stack(history) 
+                    
+                    # 2. Vectorized R Calculation (Reliability)
+                    diff = (smooth - history_tensor).abs()
+                    sum_val = smooth.abs() + history_tensor.abs() + eps
+                    
+                    # Broadcast alpha weights across the history dimension
+                    # We only use weights up to the current history length
+                    current_alpha = alpha_weights[:cur_k].view(-1, *([1] * smooth.dim()))
+                    terms = current_alpha * (diff / sum_val)
+                    R_sum = terms.sum(dim=0)
+                    
                     R = (cur_k - R_sum) / cur_k
                     R = torch.clamp(R, min=0.1, max=1.0)
 
-                    grad_inertia = grad_inertia_num / (grad_inertia_den+eps)   
-
+                    # 3. Vectorized Inertia Calculation
+                    current_beta = beta_weights[:cur_k].view(-1, *([1] * smooth.dim()))
+                    grad_inertia_num = (current_beta * history_tensor).sum(dim=0)
+                    grad_inertia_den = beta_weights[:cur_k].sum()
+                    
+                    # Bias correction for early steps
+                    grad_inertia = grad_inertia_num / (grad_inertia_den + eps)
                 else:
-
                     R = torch.ones_like(smooth)
                     grad_inertia = smooth.clone()
 
+                # Store R for diagnostics
+                state['R'] = R
 
-                state['R'] = R.detach()
-                history.append(smooth.clone().detach())
-
-                
+                # Update history buffer (Circular)
+                history.append(smooth.clone())
                 if len(history) > K:
                     history.pop(0)
 
-                # --- O ESPIÃO (DEBUG) ---
-                # Vamos espreitar o que está a acontecer dentro do motor
-                # Só imprimimos para o primeiro grupo e primeiro parâmetro para não spammar
-                if state['step'] % 100 == 0 and len(p.shape) > 1 and p.shape[0] == 32: 
-                    # p.shape[0] == 32 é um truque para apanhar a primeira camada conv (32 filtros)
-                    
-                    avg_R = R.mean().item()
-                    avg_grad = grad.abs().mean().item()
-                    avg_smooth = smooth.abs().mean().item()
-                    
-                    print(f"\n--- DIAGNÓSTICO (Passo {state['step']}) ---")
-                    print(f"R Médio: {avg_R:.5f} (Min: {R.min().item():.5f}, Max: {R.max().item():.5f})")
-                    print(f"Gradiente Médio: {avg_grad:.5f}")
-                    print(f"Alpha atual: {alpha}")
-                    
-                    if avg_R <= 0.0011:
-                         print("⚠️ ALERTA: O R está colado no fundo (Clamp Min)!")
-                    if avg_R >= 0.99:
-                         print("⚠️ ALERTA: O R está colado no teto (Clamp Max)!")
-
-                p.data.addcmul_(grad_inertia, R, value=(-eta*gamma))
-
+                # Final Weight Update
+                # p = p - (learning_rate * adaptive_gamma * R * inertia)
+                p.addcmul_(grad_inertia, R, value=(-eta * gamma))
 
         return loss
-
-        
