@@ -59,38 +59,37 @@ def train_model(model, optimizer, optimizer_name, epochs=5, best_params = None):
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
-
-            # ---Getting Data to check relation between R and gradient variance ---
-        
-            print(f"Epoch {epoch} | Batch {i} - Calculating Gradient Variance...")
-            var_real = get_grad_variance(model, criterion, inputs, labels)
-             
-            if optimizer_name == "DeltaGrad":
-
-                avg_R = 0.0
-                n_params = 0
-                found_r = False
-                for group in optimizer.param_groups:
-                    for p in group['params']:
-                        state = optimizer.state[p]
-                        if 'R' in state:
-                            avg_R += state['R'].mean().item()
-                            n_params += 1
-                            found_r = True
-            
-                if found_r:
-                    r_values.append(avg_R / n_params)
-                    variance_values.append(var_real)
-                else:
-                    print(f"Warning: Batch {i/batch_size} - Optimizer didn't find 'R' in state!")
-
-            else:
-                variance_values.append(var_real)
-
-
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
-            
+
+            # ---Getting Data to check relation between R and gradient variance ---
+            if i%5 ==0 and i!=0:  # Collect data every 5 batches to reduce overhead
+
+                print(f"Epoch {epoch} | Batch {i} - Calculating Gradient Variance...")
+                var_real = get_grad_variance(model, criterion, inputs, labels)
+                
+                if optimizer_name == "DeltaGrad":
+
+                    avg_R = 0.0
+                    n_params = 0
+                    found_r = False
+                    for group in optimizer.param_groups:
+                        for p in group['params']:
+                            state = optimizer.state[p]
+                            if 'R' in state:
+                                avg_R += state['R'].mean().item()
+                                n_params += 1
+                                found_r = True
+                
+                    if found_r:
+                        r_values.append(avg_R / n_params)
+                        variance_values.append(var_real)
+                    else:
+                        print(f"Warning: Batch {i/batch_size} - Optimizer didn't find 'R' in state!")
+
+                else:
+                    variance_values.append(var_real)
+
             #Data for convergence plot
             running_loss += loss.item()
             _, predicted = torch.max(outputs.data, 1)
