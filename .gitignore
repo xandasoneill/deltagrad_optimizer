@@ -1,1 +1,5 @@
 __pycache__/
+aliens/
+best_params_Adam.pkl
+best_params_DeltaGrad.pkl
+data/
