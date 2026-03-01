@@ -6,27 +6,35 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.stats import pearsonr, spearmanr
 
 
-def get_grad_variance(model, criterion, inputs, labels, num_samples=5):
+
+def get_grad_variance(model, criterion, inputs, labels, num_samples=15):
     """Calcula a variância real do gradiente amostrando mini-batches."""
     grads = []
-    # Usamos um sub-batch pequeno para calcular a variância local
+    model.eval()
+    # Uses a smaller batch size to simulate noise in the gradient estimation
     for _ in range(num_samples):
-        # Amostragem aleatória dentro do batch atual para simular ruído
+
+        # Sample a random subset of the batch to compute a noisy gradient
         indices = torch.randperm(inputs.size(0))[:32] 
         model.zero_grad()
         outputs = model(inputs[indices])
         loss = criterion(outputs, labels[indices])
         loss.backward()
         
-        # Flatten de todos os gradientes num vetor só
+        # Flatten of all gradients into a single vector for variance calculation
         all_grads = torch.cat([p.grad.view(-1) for p in model.parameters() if p.grad is not None])
         grads.append(all_grads)
     
-    # Variância média entre as amostras
+    # Measure variance across the collected gradients
     grads_stack = torch.stack(grads)
     variance = torch.var(grads_stack, dim=0).mean().item()
+
+    model.train()
     return variance
 
 
@@ -56,49 +64,113 @@ def load_and_plot_results(n_runs=5):
     # Proceed to plotting if data was successfully collected
     if all_r and all_variance:
         plot_r_vs_variance(all_r, all_variance)
+        plot_r_vs_variance_statistical(all_r, all_variance)
     else:
         print("Error: No data available to generate the plot.")
+
 
 def plot_r_vs_variance(r_values, variance_values):
     plt.figure(figsize=(10, 6))
     
-    # Scatter plot to analyze the correlation between R and Gradient Variance
-    # alpha=0.4 is used to handle point overlap in large datasets
+    # Calculate Pearson Correlation
+    # This measures the linear relationship between R and Variance
+    corr, _ = pearsonr(r_values, variance_values)
+    
     scatter = plt.scatter(r_values, variance_values, alpha=0.4, 
                          c=variance_values, cmap='viridis', edgecolors='none')
     
-    plt.title("DeltaGrad: Analysis of R vs Gradient Variance (Combined Runs)", fontsize=14)
-    plt.xlabel("Reliability Metric R (Network Average)", fontsize=12)
-    plt.ylabel("Real Gradient Variance", fontsize=12)
+    # Add a text box with the correlation value
+    plt.text(0.05, 0.95, f'Pearson Correlation: {corr:.3f}', 
+             transform=plt.gca().transAxes, fontsize=12,
+             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
     
-    # Add a colorbar to indicate variance intensity levels
+    plt.title(f"DeltaGrad: R vs Gradient Variance (Correlation: {corr:.3f})", fontsize=14)
+    plt.xlabel("Reliability Metric R (Network Average)", fontsize=12)
+    plt.ylabel("Real Gradient Variance (p)", fontsize=12)
+    
     plt.colorbar(scatter, label='Variance Magnitude')
     plt.grid(True, linestyle='--', alpha=0.5)
-    
-    # Save in PDF format for high-quality LaTeX/Overleaf integration
     plt.savefig("deltagrad_r_vs_variance.pdf", bbox_inches='tight')
-    
-    # Save in PNG format for quick local preview
     plt.savefig("deltagrad_r_vs_variance.png", dpi=300, bbox_inches='tight')
 
     print("Graphs saved as 'deltagrad_r_vs_variance.pdf' and '.png'")
 
-def plot_convergence(history_acc, optimizer_name, run):
 
+
+def plot_r_vs_variance_statistical(r_values, variance_values):
     plt.figure(figsize=(10, 6))
-    plt.plot(history_acc, marker='o', label=f'{optimizer_name} Accuracy')
-    plt.title(f'Convergence of {optimizer_name} on CIFAR-100', fontsize=14)
-    plt.xlabel('Epoch', fontsize=12)
-    plt.ylabel('Accuracy (%)', fontsize=12)
-    plt.xticks(range(len(history_acc)))
-    plt.grid(True, linestyle='--', alpha=0.5)
-    plt.legend()
     
-    # Save the convergence plot
-    plt.savefig(f"{optimizer_name}_convergence_run_{run}.pdf", bbox_inches='tight')
-    plt.savefig(f"{optimizer_name}_convergence_run_{run}.png", dpi=300, bbox_inches='tight')
+    # 1. Calculate Correlation Coefficients
+    pearson_val, _ = pearsonr(r_values, variance_values)
+    spearman_val, _ = spearmanr(r_values, variance_values)
+    
+    # 2. Plot using Seaborn
+    # lowess=True creates a locally weighted line that follows the data's curve
+    sns.regplot(x=r_values, y=variance_values, lowess=True, 
+                scatter_kws={'alpha': 0.4, 'color': 'teal', 'edgecolors': 'none'}, 
+                line_kws={'color': 'red', 'linewidth': 2, 'label': 'Lowess Trend'})
+    
+    # 3. Add Statistical Annotation box
+    stats_text = (f'Pearson (Linear): {pearson_val:.3f}\n'
+                  f'Spearman (Rank): {spearman_val:.3f}')
+    
+    plt.gca().text(0.05, 0.95, stats_text, transform=plt.gca().transAxes, 
+                   fontsize=11, verticalalignment='top', 
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    
+    # 4. Formatting
+    plt.title("DeltaGrad: Reliability R vs. Gradient Variance Analysis", fontsize=14)
+    plt.xlabel("Reliability Metric R (Network Average)", fontsize=12)
+    plt.ylabel("Real Gradient Variance (p)", fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.5)
+    
 
-    print(f"Convergence graphs saved as '{optimizer_name}_convergence_run_{run}.pdf' and '.png'")
+    # Save both formats
+    plt.savefig("deltagrad_statistical_correlation.png", dpi=300, bbox_inches='tight')
+    plt.savefig("deltagrad_statistical_correlation.pdf", bbox_inches='tight')
+
+    print(f"Plot saved. Pearson: {pearson_val:.3f}, Spearman: {spearman_val:.3f}")
+
+def plot_learning_curves(adam_histories, delta_histories):
+    """
+    Plots the learning curves for multiple runs of Adam and DeltaGrad.
+    Shows individual runs with transparency and the mean as a solid line.
+    """
+    plt.figure(figsize=(10, 6))
+    
+    # Define epochs based on history length
+    epochs = range(1, len(adam_histories[0]) + 1)
+
+    # Plot all Adam curves (Orange)
+    for i, history in enumerate(adam_histories):
+        # Set label only for the first line to avoid duplicate legend entries
+        label = "Adam (Individual)" if i == 0 else None 
+        plt.plot(epochs, history, color='orange', alpha=0.3, label=label)
+    
+    # Plot all DeltaGrad curves (Teal)
+    for i, history in enumerate(delta_histories):
+        label = "DeltaGrad (Individual)" if i == 0 else None
+        plt.plot(epochs, history, color='teal', alpha=0.3, label=label)
+
+    # Calculate and plot the MEAN for each optimizer with a thicker line
+    adam_mean = np.mean(adam_histories, axis=0)
+    delta_mean = np.mean(delta_histories, axis=0)
+    
+    plt.plot(epochs, adam_mean, color='darkorange', linewidth=2.5, label="Adam (Mean)")
+    plt.plot(epochs, delta_mean, color='darkslategrey', linewidth=2.5, label="DeltaGrad (Mean)")
+
+    # Chart formatting
+    plt.title("Learning Curves Comparison: Adam vs DeltaGrad", fontsize=14)
+    plt.xlabel("Epochs", fontsize=12)
+    plt.ylabel("Accuracy (%)", fontsize=12)
+    plt.legend(loc='lower right')
+    plt.grid(True, linestyle='--', alpha=0.6)
+    
+    # Save for Overleaf/LaTeX (PDF) and local view (PNG)
+    plt.savefig("learning_curves_comparison.pdf", bbox_inches='tight')
+    plt.savefig("learning_curves_comparison.png", dpi=300, bbox_inches='tight')
+
+    print("Learning curves plot saved as 'learning_curves_comparison.pdf'")
 
 def load_variance_data(optimizer_name, n_runs=5):
     """
@@ -109,18 +181,23 @@ def load_variance_data(optimizer_name, n_runs=5):
     
     for i in range(1, n_runs + 1):
         # Ensure filenames match your saving convention (e.g., variance_values_Adam_run_1.txt)
-        filename = f"variance_values_{optimizer_name}_run_{i}.txt"
+        filename = f"variance_values_run_{optimizer_name}_{i}.txt"
         
         if os.path.exists(filename):
             with open(filename, "r") as f:
-                data = [float(line.strip()) for line in f if line.strip()]
+                data = [float(line.strip()) for line in f if line.strip() and float(line.strip()) > 1e-10]
                 all_runs_data.append(data)
+
         else:
             print(f"Warning: {filename} not found.")
+
+    min_len = min(len(r) for r in all_runs_data)
+    all_runs_data = [r[:min_len] for r in all_runs_data]
 
     # Convert to a 2D numpy array (Runs x Iterations)
     # Note: All runs must have the same number of data points
     return np.array(all_runs_data)
+
 
 def plot_variance_comparison(n_runs=5):
     # Load data for both optimizers
@@ -160,3 +237,45 @@ def plot_variance_comparison(n_runs=5):
     plt.savefig("variance_comparison_log.png", dpi=300, bbox_inches='tight')
     
     print("Variance comparison plots saved successfully.")
+
+
+def plot_accuracy_comparison(adam_accs, delta_accs):
+    """
+    Creates a bar chart comparing the mean accuracy of Adam vs DeltaGrad
+    with error bars representing the standard deviation.
+    """
+    # Calculate Mean and Standard Deviation
+    means = [np.mean(adam_accs), np.mean(delta_accs)]
+    stds = [np.std(adam_accs), np.std(delta_accs)]
+    labels = ['Adam', 'DeltaGrad']
+    
+    plt.figure(figsize=(8, 6))
+    x_pos = np.arange(len(labels))
+    
+    # Create bars with colors
+    bars = plt.bar(x_pos, means, yerr=stds, align='center', 
+                   alpha=0.7, color=['orange', 'teal'], 
+                   capsize=10, edgecolor='black')
+
+    # Add labels and styling
+    plt.ylabel('Final Accuracy (%)', fontsize=12)
+    plt.xticks(x_pos, labels, fontsize=12)
+    plt.title('Final Accuracy Comparison: Adam vs DeltaGrad', fontsize=14)
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+
+    # Add text labels on top of the bars for exact values
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + 0.5,
+                 f'{height:.2f}%', ha='center', va='bottom', fontweight='bold')
+
+    # Adjust Y-axis to focus on the relevant accuracy range
+    # (e.g., if accuracies are 80-90%, don't start at 0 to show difference better)
+    min_acc = min(means) - max(stds) - 5
+    plt.ylim(max(0, min_acc), 100)
+
+    # Save outputs
+    plt.savefig("accuracy_comparison_bars.pdf", bbox_inches='tight')
+    plt.savefig("accuracy_comparison_bars.png", dpi=300, bbox_inches='tight')
+     
+    print(f"Comparison plot saved. Adam: {means[0]:.2f}% | DeltaGrad: {means[1]:.2f}%")
