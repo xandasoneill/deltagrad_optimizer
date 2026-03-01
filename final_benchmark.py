@@ -4,7 +4,7 @@ import torch
 
 from model import ConvNet
 
-from visualizations import load_and_plot_results, get_grad_variance, plot_convergence, plot_variance_comparison
+from visualizations import load_and_plot_results, plot_accuracy_comparison, plot_variance_comparison, plot_learning_curves
 from engine import train_model
 
 best_params_deltagrad = joblib.load("best_params_DeltaGrad.pkl")
@@ -15,6 +15,7 @@ best_params_adam = joblib.load("best_params_Adam.pkl")
 def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
 
     all_accuracies = []
+    all_histories = []
     
     for i in range(n_runs):
 
@@ -22,10 +23,14 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
         
         if optimizer_name == "DeltaGrad":
             best_params = best_params_deltagrad
-            optimizer = DeltaGrad(model.parameters(), **best_params)
+            best_params_to_pass = best_params_deltagrad.copy()
+            best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
+            optimizer = DeltaGrad(model.parameters(), **best_params_to_pass)
         else:
             best_params = best_params_adam
-            optimizer = torch.optim.Adam(model.parameters(), **best_params)
+            best_params_to_pass = best_params_adam.copy()
+            best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
+            optimizer = torch.optim.Adam(model.parameters(), **best_params_to_pass)
         
         histacc, r_values, variance_values = train_model(model, optimizer, optimizer_name, best_params=best_params)
 
@@ -42,22 +47,22 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             print(f"Run {i+1} - Final R values: {r_values[-1] if r_values else 'No R values collected'}")
             print(f"Run {i+1} - Final Gradient Variance: {variance_values[-1] if variance_values else 'No variance values collected'}")
 
-        plot_convergence(histacc, optimizer_name, i+1)
-
-
+        all_histories.append(histacc)
 
         all_accuracies.append(histacc[-1])  # Append the last accuracy value from history
         print(f"Run {i+1}: Accuracy = {histacc[-1]:.4f}")
     
-    return all_accuracies
+    return all_accuracies, all_histories
 
 if __name__ == "__main__":
 
 
     print("Starting benchmark for Adam...")
-    adam_accuracies = run_benchmark(n_runs=5, optimizer_name="Adam")
+    adam_accuracies, adam_histories = run_benchmark(n_runs=5, optimizer_name="Adam")
     print("Starting benchmark for DeltaGrad...")
-    deltagrad_accuracies = run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
+    deltagrad_accuracies, deltagrad_histories = run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
 
     load_and_plot_results()  # Load data from all runs and generate the R vs Variance plot
     plot_variance_comparison(n_runs=5)  # Generate variance comparison plots for both optimizers
+    plot_accuracy_comparison(adam_accuracies, deltagrad_accuracies)  # Generate accuracy comparison plot
+    plot_learning_curves(adam_histories, deltagrad_histories)  # Generate learning curves comparison plot   
