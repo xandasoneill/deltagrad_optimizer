@@ -12,29 +12,34 @@ from scipy.stats import pearsonr, spearmanr
 
 
 
-def get_grad_variance(model, criterion, inputs, labels, num_samples=15):
-    """Calcula a variância real do gradiente amostrando mini-batches."""
+def get_grad_variance(model, criterion, inputs, labels, num_samples=8):
     grads = []
-    model.eval()
-    # Uses a smaller batch size to simulate noise in the gradient estimation
-    for _ in range(num_samples):
+    model.train() 
 
-        # Sample a random subset of the batch to compute a noisy gradient
-        indices = torch.randperm(inputs.size(0))[:32] 
+    
+    # Congelamos a atualização das estatísticas do BatchNorm
+    for m in model.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.track_running_stats = False 
+    # ---------------------------
+
+    sample_size = max(1, inputs.size(0) // 4) 
+    for _ in range(num_samples):
+        indices = torch.randperm(inputs.size(0))[:sample_size]
         model.zero_grad()
         outputs = model(inputs[indices])
         loss = criterion(outputs, labels[indices])
         loss.backward()
-        
-        # Flatten of all gradients into a single vector for variance calculation
-        all_grads = torch.cat([p.grad.view(-1) for p in model.parameters() if p.grad is not None])
+        all_grads = torch.cat([p.grad.detach().view(-1) for p in model.parameters() if p.grad is not None])
         grads.append(all_grads)
     
-    # Measure variance across the collected gradients
-    grads_stack = torch.stack(grads)
-    variance = torch.var(grads_stack, dim=0).mean().item()
+    # --- RESTAURAR DEPOIS ---
+    for m in model.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.track_running_stats = True
+    # -------------------------
 
-    model.train()
+    variance = torch.var(torch.stack(grads), dim=0).mean().item()
     return variance
 
 
