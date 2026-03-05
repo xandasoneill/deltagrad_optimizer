@@ -3,109 +3,110 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-import matplotlib.pyplot as plt
-import time
-from DeltaGrad import DeltaGrad
-from visualizations import get_grad_variance
-from scipy import stats
+from torch.utils.data import DataLoader, random_split
 import optuna
-from model import ConvNet
 import joblib
+from model import ConvNet  
+from DeltaGrad import DeltaGrad
 
-def train_model(trial, model, optimizer, epochs=5):
-
+def train_model(trial, model, optimizer, epochs=15):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     criterion = nn.CrossEntropyLoss()
-    #Compose: composes several transforms, so the images can be fed to the NN
+    
     transform = transforms.Compose([
-        transforms.ToTensor(), #Turns intergers between [0,255], to floats between [0,1]
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
-        #Normalizes the pixel values so that they range between [-1, 1],
-        #it does that by making the difference with 0.5, and dividing by 0.5, 
-        #in this case
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
+    # 1. Carregar e Dividir os Dados (Fim do Data Leakage)
+    full_trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
+    
+    # Reservamos 5000 imagens para validação (o Optuna só vê estas para decidir o score)
+    train_subset, val_subset = random_split(
+        full_trainset, [45000, 5000], 
+        generator=torch.Generator().manual_seed(42)
+    )
 
-    #Loading dataset
-    trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=trial.suggest_int("batch_size", 16, 256), shuffle=True)
+    # Batch size fixo em 16 para o Stress Test
+    trainloader = DataLoader(train_subset, batch_size=16, shuffle=True)
+    valloader = DataLoader(val_subset, batch_size=16, shuffle=False)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Training on: {device}")
- 
     for epoch in range(epochs):
+        # FASE DE TREINO
         model.train()
-        correct = 0
-        total = 0
         for inputs, labels in trainloader:
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
+            # Opcional: torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
-            
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
         
-        accuracy = 100 * correct / total
+        # FASE DE VALIDAÇÃO (O que evita o erro do Carl McBride Ellis)
+        model.eval()
+        val_correct = 0
+        val_total = 0
+        with torch.no_grad():
+            for inputs, labels in valloader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                _, predicted = torch.max(outputs.data, 1)
+                val_total += labels.size(0)
+                val_correct += (predicted == labels).sum().item()
         
-        trial.report(accuracy, epoch)
+        val_accuracy = 100 * val_correct / val_total
+        
+        # Reportar ao Optuna baseado nos dados de VALIDAÇÃO
+        trial.report(val_accuracy, epoch)
         if trial.should_prune():
             raise optuna.exceptions.TrialPruned()
             
-    return accuracy
+    return val_accuracy
 
-def objective(trial, optimizer):
-
-    if optimizer == "Adam":
-        optimizer_name = "Adam"
-
-    elif optimizer == "DeltaGrad":
-        optimizer_name = "DeltaGrad"
+def objective(trial, optimizer_name):
+    # Fixar seed para reprodutibilidade total entre trials
+    torch.manual_seed(42)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    model = ConvNet().to(torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+    model = ConvNet().to(device)
 
     if optimizer_name == "Adam":
-        optimizer = optim.Adam(model.parameters(), lr=trial.suggest_float("lr", 1e-5, 1e-2, log=True))
+        lr = trial.suggest_float("lr", 1e-5, 1e-1, log=True)
+        optimizer = optim.Adam(model.parameters(), lr=lr)
     else:
-       
-
-        lr = trial.suggest_float("lr", 1e-3, 0.5, log=True)   
-        gamma = trial.suggest_float("gamma", 0.5, 1.0)        # Calibração DeltaGrad
-        alpha = trial.suggest_float("alpha", 0.1, 0.9)        # Peso da história no R
-        beta = trial.suggest_float("beta", 0.5, 0.99)         # Inércia dos gradientes
-        k_val = trial.suggest_int("K", 1, 8)                  
+        # Hiperparâmetros do DeltaGrad
+        lr = trial.suggest_float("lr", 1e-4, 0.5, log=True)   
+        gamma = trial.suggest_float("gamma", 0.5, 1.0)
+        alpha = trial.suggest_float("alpha", 0.1, 0.9)
+        beta = trial.suggest_float("beta", 0.5, 0.99)
+        k_val = trial.suggest_int("K", 2, 8) # Janela de 2 a 8 para maior estabilidade
         smooth = trial.suggest_float("smoothing", 0.0001, 0.1)
         
-
         optimizer = DeltaGrad(
-        model.parameters(), 
-        lr=lr, 
-        gamma=gamma, 
-        alpha=alpha, 
-        beta=beta, 
-        K=k_val, 
-        smoothing=smooth,
+            model.parameters(), 
+            lr=lr, 
+            gamma=gamma, 
+            alpha=alpha, 
+            beta=beta, 
+            K=k_val, 
+            smoothing=smooth
         )
 
-    accuracy = train_model(trial, model, optimizer)
+    accuracy = train_model(trial, model, optimizer, epochs=15)
     return accuracy
 
-
-
 if __name__ == "__main__":
-    
+    # Otimização para Adam
+    print("Iniciando tuning do Adam...")
     study_Adam = optuna.create_study(direction="maximize")
-    study_Adam.optimize(lambda trial: objective(trial, "Adam"), n_trials=10)
+    study_Adam.optimize(lambda trial: objective(trial, "Adam"), n_trials=20)
+    joblib.dump(study_Adam.best_params, "best_params_Adam_fixed_b16.pkl")
 
-    joblib.dump(study_Adam.best_params, "best_params_Adam.pkl")
-
+    # Otimização para DeltaGrad
+    print("\nIniciando tuning do DeltaGrad...")
     study_DeltaGrad = optuna.create_study(direction="maximize")
-    study_DeltaGrad.optimize(lambda trial: objective(trial, "DeltaGrad"), n_trials=10)
-
-    joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad.pkl")
+    study_DeltaGrad.optimize(lambda trial: objective(trial, "DeltaGrad"), n_trials=20)
+    joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad_fixed_b16.pkl")
     
-
-
-
+    print("\nTuning concluído. Hiperparâmetros salvos.")

@@ -27,7 +27,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
             optimizer = DeltaGrad(model.parameters(), **best_params_to_pass)
         else:
-            best_params = best_params_adam
+            best_params = best_params_deltagrad
             best_params_to_pass = best_params_adam.copy()
             best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
             optimizer = torch.optim.Adam(model.parameters(), **best_params_to_pass)
