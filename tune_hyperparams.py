@@ -109,4 +109,4 @@ if __name__ == "__main__":
     study_DeltaGrad.optimize(lambda trial: objective(trial, "DeltaGrad"), n_trials=20)
     joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad_fixed_b16.pkl")
     
-    print("\nTuning concluído. Hiperparâmetros salvos.")
+    print("\nTuning done. Hiperparameters saved.")

@@ -7,8 +7,8 @@ from model import ConvNet
 from visualizations import load_and_plot_results, plot_accuracy_comparison, plot_variance_comparison, plot_learning_curves
 from engine import train_model
 
-best_params_deltagrad = joblib.load("best_params_DeltaGrad.pkl")
-best_params_adam = joblib.load("best_params_Adam.pkl")
+best_params_deltagrad = joblib.load("best_params_DeltaGrad_fixed_b16.pkl")
+best_params_adam = joblib.load("best_params_Adam_fixed_b16.pkl")
 
 
 
@@ -24,15 +24,15 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
         if optimizer_name == "DeltaGrad":
             best_params = best_params_deltagrad
             best_params_to_pass = best_params_deltagrad.copy()
-            best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
+            #best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
             optimizer = DeltaGrad(model.parameters(), **best_params_to_pass)
         else:
             best_params = best_params_deltagrad
             best_params_to_pass = best_params_adam.copy()
-            best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
+            #best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
             optimizer = torch.optim.Adam(model.parameters(), **best_params_to_pass)
         
-        histacc, r_values, variance_values = train_model(model, optimizer, optimizer_name, best_params=best_params)
+        histacc, r_values, variance_values = train_model(model, optimizer, optimizer_name, best_params=best_params, batch=16)
 
         # Save R and variance values for plotting
         with open(f"r_values_run_{optimizer_name}_{i+1}.txt", "w") as f:

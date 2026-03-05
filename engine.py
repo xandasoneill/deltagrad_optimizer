@@ -8,7 +8,8 @@ import torchvision.transforms as transforms
 from model import ConvNet
 from visualizations import get_grad_variance
 
-def train_model(model, optimizer, optimizer_name, epochs=10, best_params=None):
+def train_model(model, optimizer, optimizer_name, epochs=15, best_params=None, batch=None):
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     criterion = nn.CrossEntropyLoss()
     
@@ -22,9 +23,9 @@ def train_model(model, optimizer, optimizer_name, epochs=10, best_params=None):
     trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
     testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
 
-    batch_size = best_params["batch_size"]
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False)
+    #batch_size = best_params["batch_size"]
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch, shuffle=True)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=batch, shuffle=False)
 
     print(f"Training on: {device}")
 
@@ -48,7 +49,7 @@ def train_model(model, optimizer, optimizer_name, epochs=10, best_params=None):
 
             # --- DATA COLLECTION (R vs Gradient Variance) ---
             # Collect data every 5 batches to reduce computational overhead
-            if i % 5 == 0 and i != 0:
+            if i % 10 == 0 and i != 0:
                 # Save current training gradients to prevent the measurement from clearing them
                 original_grads = [p.grad.clone() for p in model.parameters() if p.grad is not None]
                 
