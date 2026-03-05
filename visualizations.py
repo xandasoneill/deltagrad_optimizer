@@ -284,3 +284,33 @@ def plot_accuracy_comparison(adam_accs, delta_accs):
     plt.savefig("accuracy_comparison_bars.png", dpi=300, bbox_inches='tight')
      
     print(f"Comparison plot saved. Adam: {means[0]:.2f}% | DeltaGrad: {means[1]:.2f}%")
+
+def calculate_save_metrics(results, optimizer_name):
+
+    mean_acc = np.mean(results)
+    std_dev = np.std(results)
+    
+    std_error = std_dev / np.sqrt(len(results))
+    
+    print(f"--- Metrics for {optimizer_name} ---")
+    print(f"Mean Accuracy: {mean_acc:.2f}%")
+    print(f"Standard Deviation: {std_dev:.2f}")
+    print(f"95% Confidence Interval: [{mean_acc - 1.96*std_error:.2f}, {mean_acc + 1.96*std_error:.2f}]")
+
+    filename = f"results_{optimizer_name.lower()}.txt"
+    
+    with open(filename, "w") as f:
+        f.write(f"Optimizer: {optimizer_name}\n")
+        f.write(f"Final Mean Accuracy: {mean_acc:.2f}%\n")
+        f.write(f"Standard Deviation: {std_dev:.4f}\n")
+        f.write("-" * 30 + "\n")
+        f.write("Individual Runs (Seeds):\n")
+        for i, res in enumerate(results):
+            f.write(f"Run {i+1}: {res:.2f}%\n")
+            
+    print(f"Results for {optimizer_name} saved to {filename}")
+
+
+
+
+    

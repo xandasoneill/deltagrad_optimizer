@@ -4,7 +4,7 @@ import torch
 
 from model import ConvNet
 
-from visualizations import load_and_plot_results, plot_accuracy_comparison, plot_variance_comparison, plot_learning_curves
+from visualizations import load_and_plot_results, plot_accuracy_comparison, plot_variance_comparison, plot_learning_curves, calculate_save_metrics
 from engine import train_model
 
 best_params_deltagrad = joblib.load("best_params_DeltaGrad_fixed_b16.pkl")
@@ -24,13 +24,25 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
         if optimizer_name == "DeltaGrad":
             best_params = best_params_deltagrad
             best_params_to_pass = best_params_deltagrad.copy()
-            #best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
+            
+            # Triple learning rate here
+            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
+            
+            if "batch_size" in best_params_to_pass:
+                best_params_to_pass.pop("batch_size")
+
             optimizer = DeltaGrad(model.parameters(), **best_params_to_pass)
         else:
-            best_params = best_params_deltagrad
+            best_params = best_params_adam
             best_params_to_pass = best_params_adam.copy()
-            #best_params_to_pass.pop("batch_size")  # Remove batch_size from optimizer params
-            optimizer = torch.optim.Adam(model.parameters(), **best_params_to_pass)
+
+            # Triple learning rate here
+            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
+            
+            if "batch_size" in best_params_to_pass:
+                best_params_to_pass.pop("batch_size")
+
+            optimizer = DeltaGrad(model.parameters(), **best_params_to_pass)
         
         histacc, r_values, variance_values = train_model(model, optimizer, optimizer_name, best_params=best_params, batch=16)
 
@@ -65,4 +77,8 @@ if __name__ == "__main__":
     load_and_plot_results()  # Load data from all runs and generate the R vs Variance plot
     plot_variance_comparison(n_runs=5)  # Generate variance comparison plots for both optimizers
     plot_accuracy_comparison(adam_accuracies, deltagrad_accuracies)  # Generate accuracy comparison plot
-    plot_learning_curves(adam_histories, deltagrad_histories)  # Generate learning curves comparison plot   
+    plot_learning_curves(adam_histories, deltagrad_histories)  # Generate learning curves comparison plot  
+
+    calculate_save_metrics(adam_accuracies, "DeltaGrad")
+    calculate_save_metrics(deltagrad_accuracies, "Adam") 
+
