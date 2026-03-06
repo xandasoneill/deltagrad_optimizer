@@ -1,6 +1,7 @@
 import joblib
 from DeltaGrad import DeltaGrad
 import torch
+import torch.optim as optim
 
 from model import ConvNet
 
@@ -26,7 +27,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params_to_pass = best_params_deltagrad.copy()
             
             # Triple learning rate here
-            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
+            #best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
@@ -37,12 +38,12 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params_to_pass = best_params_adam.copy()
 
             # Triple learning rate here
-            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
+            #best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
 
-            optimizer = DeltaGrad(model.parameters(), **best_params_to_pass)
+            optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
         histacc, r_values, variance_values = train_model(model, optimizer, optimizer_name, best_params=best_params, batch=16)
 
@@ -79,6 +80,6 @@ if __name__ == "__main__":
     plot_accuracy_comparison(adam_accuracies, deltagrad_accuracies)  # Generate accuracy comparison plot
     plot_learning_curves(adam_histories, deltagrad_histories)  # Generate learning curves comparison plot  
 
-    calculate_save_metrics(adam_accuracies, "DeltaGrad")
-    calculate_save_metrics(deltagrad_accuracies, "Adam") 
+    calculate_save_metrics(adam_accuracies, "Adam")
+    calculate_save_metrics(deltagrad_accuracies, "Deltagrad") 
 
