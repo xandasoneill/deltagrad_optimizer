@@ -15,8 +15,11 @@ best_params_adam = joblib.load("best_params_Adam_fixed_b16.pkl")
 
 def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
 
-    all_accuracies = []
-    all_histories = []
+    end_accuracies = []
+    acc_history = []
+    r_history = []
+    variance_history = []
+
     
     for i in range(n_runs):
 
@@ -45,41 +48,54 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
 
             optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
-        histacc, r_values, variance_values = train_model(model, optimizer, optimizer_name, best_params=best_params, batch=16)
+        batch_size = best_params["batch_size"]
+        histacc, r_values, variance_values = train_model(model, optimizer, optimizer_name, best_params=best_params, batch=batch_size)
 
         # Save R and variance values for plotting
-        with open(f"r_values_run_{optimizer_name}_{i+1}.txt", "w") as f:
-            for r in r_values:
-                f.write(f"{r}\n")
-        with open(f"variance_values_run_{optimizer_name}_{i+1}.txt", "w") as f:
-            for v in variance_values:
-                f.write(f"{v}\n")
+        r_history.append(r_values)
+
+        variance_history.append(variance_values)
         
         if optimizer_name == "DeltaGrad":
 
             print(f"Run {i+1} - Final R values: {r_values[-1] if r_values else 'No R values collected'}")
             print(f"Run {i+1} - Final Gradient Variance: {variance_values[-1] if variance_values else 'No variance values collected'}")
 
-        all_histories.append(histacc)
+        acc_history.append(histacc)
 
-        all_accuracies.append(histacc[-1])  # Append the last accuracy value from history
+        end_accuracies.append(histacc[-1])  # Append the last accuracy value from history
         print(f"Run {i+1}: Accuracy = {histacc[-1]:.4f}")
+
+    results = {
+        "opimizer" : optimizer_name,
+        "acc_history": acc_history,
+        "r_history": r_history,
+        "variance_history": variance_history,
+
+
+    }
+
+    results_file = f"{optimizer_name}_results_batch{batch_size}_lr{best_params_to_pass["lr"]}.pkl"
+    joblib.dump(results, results_file)
+
+    load_and_plot_results()  # Load data from all runs and generate the R vs Variance plot
+    plot_variance_comparison(n_runs)  # Generate variance comparison plots for both optimizers
+
+    calculate_save_metrics(adam_accuracies, "Adam")
+    calculate_save_metrics(deltagrad_accuracies, "Deltagrad") 
     
-    return all_accuracies, all_histories
+    
+    return end_accuracies, acc_history, r_history, variance_history
 
 if __name__ == "__main__":
 
 
     print("Starting benchmark for Adam...")
-    adam_accuracies, adam_histories = run_benchmark(n_runs=5, optimizer_name="Adam")
+    adam_final_accuracies, adam_acc_history = run_benchmark(n_runs=5, optimizer_name="Adam")
     print("Starting benchmark for DeltaGrad...")
-    deltagrad_accuracies, deltagrad_histories = run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
+    deltagrad_final_accuracies, deltagrad_acc_history = run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
 
-    load_and_plot_results()  # Load data from all runs and generate the R vs Variance plot
-    plot_variance_comparison(n_runs=5)  # Generate variance comparison plots for both optimizers
-    plot_accuracy_comparison(adam_accuracies, deltagrad_accuracies)  # Generate accuracy comparison plot
-    plot_learning_curves(adam_histories, deltagrad_histories)  # Generate learning curves comparison plot  
+    plot_accuracy_comparison(adam_final_accuracies, deltagrad_final_accuracies)  # Generate accuracy comparison plot
+    plot_learning_curves(adam_acc_history, deltagrad_acc_history)  # Generate learning curves comparison plot  
 
-    calculate_save_metrics(adam_accuracies, "Adam")
-    calculate_save_metrics(deltagrad_accuracies, "Deltagrad") 
 

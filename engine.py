@@ -8,8 +8,8 @@ import torchvision.transforms as transforms
 from model import ConvNet
 from visualizations import get_grad_variance
 
-def train_model(model, optimizer, optimizer_name, epochs=15, best_params=None, batch=None):
-    
+def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     criterion = nn.CrossEntropyLoss()
     

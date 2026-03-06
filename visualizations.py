@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import pearsonr, spearmanr
 
+import joblib
+
 
 
 def get_grad_variance(model, criterion, inputs, labels, num_samples=8):
@@ -43,100 +45,114 @@ def get_grad_variance(model, criterion, inputs, labels, num_samples=8):
     return variance
 
 
-def load_and_plot_results(n_runs=5):
-    
-    all_r = []
-    all_variance = []
+def load_and_plot_results(results_file, optimizer_name):
 
-    for i in range(1, n_runs + 1):
-        r_file = f"r_values_run_DeltaGrad_{i}.txt"
-        v_file = f"variance_values_run_DeltaGrad_{i}.txt"
+    if optimizer_name == "DeltaGrad":
 
-        # Check if files exist to prevent runtime errors
-        if os.path.exists(r_file) and os.path.exists(v_file):
-            # Load R values: strip whitespace and convert to float
-            with open(r_file, "r") as f:
-                all_r.extend([float(line.strip()) for line in f if line.strip()])
-            
-            # Load Variance values: strip whitespace and convert to float
-            with open(v_file, "r") as f:
-                all_variance.extend([float(line.strip()) for line in f if line.strip()])
-            
-            print(f"Data from Run {i} successfully loaded.")
+        if os.path.exists(results_file):
+
+            results = joblib.load(results_file)
+            v_history = results["variance_history"] # Lista de listas (5 x iterações)
+            r_history = results["r_history"]        # Lista de listas (5 x iterações)
+
+            if len(v_history) == len(r_history):
+                # 1. Gera os gráficos individuais de cada run
+                for i in range(len(v_history)):
+                    plot_individual_run(r_history[i], v_history[i], run_id=i+1)
+                
+                # 2. Gera o "Killer Plot" com todas as runs juntas
+                plot_all_runs_combined(r_history, v_history)
+            else:
+                print("Variance history is not the same size as R history!")
+
         else:
-            print(f"Warning: Files for Run {i} were not found.")
 
-    # Proceed to plotting if data was successfully collected
-    if all_r and all_variance:
-        plot_r_vs_variance(all_r, all_variance)
-        plot_r_vs_variance_statistical(all_r, all_variance)
-    else:
-        print("Error: No data available to generate the plot.")
+            print("Results file path does not exist!")
 
 
-def plot_r_vs_variance(r_values, variance_values):
-    plt.figure(figsize=(10, 6))
+
+def plot_all_runs_combined(r_history_list, v_history_list):
+
+    plt.figure(figsize=(12, 7))
     
-    # Calculate Pearson Correlation
-    # This measures the linear relationship between R and Variance
-    corr, _ = pearsonr(r_values, variance_values)
+    # Paleta profissional expandida
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+              '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
     
-    scatter = plt.scatter(r_values, variance_values, alpha=0.4, 
-                         c=variance_values, cmap='viridis', edgecolors='none')
+    r_flat = [item for sublist in r_history_list for item in sublist]
+    v_flat = [item for sublist in v_history_list for item in sublist]
     
-    # Add a text box with the correlation value
-    plt.text(0.05, 0.95, f'Pearson Correlation: {corr:.3f}', 
-             transform=plt.gca().transAxes, fontsize=12,
-             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+    # Cálculo da Correlação e P-Value Global
+    # O p-value testa a hipótese nula de que não há correlação
+    global_r, global_p = pearsonr(r_flat, v_flat)
     
-    plt.title(f"DeltaGrad: R vs Gradient Variance (Correlation: {corr:.3f})", fontsize=14)
+    all_pearsons = []
+    for i, (r_vals, v_vals) in enumerate(zip(r_history_list, v_history_list)):
+        corr, _ = pearsonr(r_vals, v_vals)
+        all_pearsons.append(corr)
+        
+        current_color = colors[i % len(colors)]
+        plt.scatter(r_vals, v_vals, alpha=0.12, color=current_color, edgecolors='none', 
+                    label=f'Run {i+1} (r={corr:.2f})')
+        
+        sns.regplot(x=np.array(r_vals), y=np.array(v_vals), scatter=False, lowess=True, 
+                    line_kws={'color': current_color, 'linewidth': 1.2, 'alpha': 0.7})
+
+    # Tendência Global
+    sns.regplot(x=np.array(r_flat), y=np.array(v_flat), scatter=False, lowess=True, 
+                line_kws={'color': 'black', 'linewidth': 3, 'ls': '--', 'label': 'Global Trend'})
+
+    # Formatação do P-value para notação científica se for muito pequeno
+    p_text = f"{global_p:.2e}" if global_p < 0.001 else f"{global_p:.4f}"
+
+    mean_corr = np.mean(all_pearsons)
+    plt.title(f"DeltaGrad Multi-Run Analysis: Reliability R vs Variance\n"
+              f"Global r: {global_r:.3f} | p-value: {p_text}", fontsize=14)
+    
     plt.xlabel("Reliability Metric R (Network Average)", fontsize=12)
     plt.ylabel("Real Gradient Variance (p)", fontsize=12)
+    plt.legend(loc='upper right', fontsize=9, ncol=2 if len(r_history_list) <= 5 else 3)
+    plt.grid(True, linestyle='--', alpha=0.3)
     
-    plt.colorbar(scatter, label='Variance Magnitude')
-    plt.grid(True, linestyle='--', alpha=0.5)
-    plt.savefig("deltagrad_r_vs_variance.pdf", bbox_inches='tight')
-    plt.savefig("deltagrad_r_vs_variance.png", dpi=300, bbox_inches='tight')
+    # Gravação obrigatória em PDF para o paper
+    plt.savefig("deltagrad_combined_correlation.pdf", bbox_inches='tight')
+    plt.savefig("deltagrad_combined_correlation.png", dpi=300, bbox_inches='tight')
 
-    print("Graphs saved as 'deltagrad_r_vs_variance.pdf' and '.png'")
-
+    print(f"Gráfico gerado: r={global_r:.3f}, p={p_text}")
 
 
-def plot_r_vs_variance_statistical(r_values, variance_values):
-    plt.figure(figsize=(10, 6))
+
+def plot_individual_run(r_values, variance_values, run_id):
+    plt.figure(figsize=(8, 5))
     
-    # 1. Calculate Correlation Coefficients
-    pearson_val, _ = pearsonr(r_values, variance_values)
-    spearman_val, _ = spearmanr(r_values, variance_values)
+    # Calcular Pearson e p-value
+    pearson_val, p_val = pearsonr(r_values, variance_values)
     
-    # 2. Plot using Seaborn
-    # lowess=True creates a locally weighted line that follows the data's curve
+    # Formatação do p-value (notação científica se for muito pequeno)
+    p_text = f"{p_val:.2e}" if p_val < 0.001 else f"{p_val:.4f}"
+    
+    # Plot com linha Lowess para capturar a tendência não linear
     sns.regplot(x=r_values, y=variance_values, lowess=True, 
                 scatter_kws={'alpha': 0.4, 'color': 'teal', 'edgecolors': 'none'}, 
-                line_kws={'color': 'red', 'linewidth': 2, 'label': 'Lowess Trend'})
+                line_kws={'color': 'red', 'linewidth': 2})
     
-    # 3. Add Statistical Annotation box
-    stats_text = (f'Pearson (Linear): {pearson_val:.3f}\n'
-                  f'Spearman (Rank): {spearman_val:.3f}')
-    
-    plt.gca().text(0.05, 0.95, stats_text, transform=plt.gca().transAxes, 
-                   fontsize=11, verticalalignment='top', 
-                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-    
-    # 4. Formatting
-    plt.title("DeltaGrad: Reliability R vs. Gradient Variance Analysis", fontsize=14)
-    plt.xlabel("Reliability Metric R (Network Average)", fontsize=12)
-    plt.ylabel("Real Gradient Variance (p)", fontsize=12)
+    # Título com r e p
+    plt.title(f"Run {run_id}: R vs. Variance\n(r={pearson_val:.3f}, p={p_text})", fontsize=12)
+    plt.xlabel("Reliability Metric R", fontsize=10)
+    plt.ylabel("Gradient Variance", fontsize=10)
     plt.grid(True, linestyle='--', alpha=0.5)
+
+    # Guardar em ambos os formatos
+    plt.savefig(f"deltagrad_run_{run_id}_stats.pdf", bbox_inches='tight')
+    plt.savefig(f"deltagrad_run_{run_id}_stats.png", dpi=150, bbox_inches='tight')
     
+    plt.close() # Libertar memória do GPU/RAM
+    print(f"Individual run {run_id} saved (p={p_text})")
 
-    # Save both formats
-    plt.savefig("deltagrad_statistical_correlation.png", dpi=300, bbox_inches='tight')
-    plt.savefig("deltagrad_statistical_correlation.pdf", bbox_inches='tight')
 
-    print(f"Plot saved. Pearson: {pearson_val:.3f}, Spearman: {spearman_val:.3f}")
 
 def plot_learning_curves(adam_histories, delta_histories):
+
     """
     Plots the learning curves for multiple runs of Adam and DeltaGrad.
     Shows individual runs with transparency and the mean as a solid line.
@@ -177,71 +193,67 @@ def plot_learning_curves(adam_histories, delta_histories):
 
     print("Learning curves plot saved as 'learning_curves_comparison.pdf'")
 
-def load_variance_data(optimizer_name, n_runs=5):
-    """
-    Loads variance values from text files for a specific optimizer.
-    Expects files named: variance_values_{optimizer_name}_run_{i}.txt
-    """
-    all_runs_data = []
-    
-    for i in range(1, n_runs + 1):
-        # Ensure filenames match your saving convention (e.g., variance_values_Adam_run_1.txt)
-        filename = f"variance_values_run_{optimizer_name}_{i}.txt"
-        
-        if os.path.exists(filename):
-            with open(filename, "r") as f:
-                data = [float(line.strip()) for line in f if line.strip() and float(line.strip()) > 1e-10]
-                all_runs_data.append(data)
 
+
+def plot_variance_comparison(results_file1, results_file2):
+    
+    if os.path.exists(results_file1) and os.path.exists(results_file2):
+        res1 = joblib.load(results_file1)
+        res2 = joblib.load(results_file2)
+
+        # Lógica de atribuição correta
+        if res1["optimizer_name"] == "DeltaGrad":
+            results_dg, results_adam = res1, res2
         else:
-            print(f"Warning: {filename} not found.")
+            results_dg, results_adam = res2, res1
 
-    min_len = min(len(r) for r in all_runs_data)
-    all_runs_data = [r[:min_len] for r in all_runs_data]
+        plt.figure(figsize=(12, 7))
+        
+        # Cores para o gráfico
+        dg_color, adam_color = 'teal', 'orange'
+        
+        def process_and_plot(history_list, label, color):
+            # Converter para matriz e filtrar valores < 10^-10
+            matrix = np.array(history_list)
+            matrix = np.where(matrix < 1e-10, 1e-10, matrix)
+            
+            # Plot das 5 runs individuais (suaves)
+            for i in range(matrix.shape[0]):
+                plt.plot(matrix[i], color=color, alpha=0.15, linewidth=1)
+            
+            # Plot da média (grossa)
+            mean_vals = np.mean(matrix, axis=0)
+            plt.plot(mean_vals, color=color, linewidth=2.5, label=f'{label} (Mean)')
+            
+            return np.mean(matrix) # Retorna a média global de todas as runs/épocas
 
-    # Convert to a 2D numpy array (Runs x Iterations)
-    # Note: All runs must have the same number of data points
-    return np.array(all_runs_data)
+        # Gerar os plots e calcular médias globais
+        avg_var_dg = process_and_plot(results_dg["variance_history"], "DeltaGrad", dg_color)
+        avg_var_adam = process_and_plot(results_adam["variance_history"], "Adam", adam_color)
 
+        # Configurações do gráfico
+        plt.yscale('log') # Escala logarítmica é vital para variância
+        plt.title("Gradient Variance Evolution: DeltaGrad vs Adam (Stress Test)", fontsize=14)
+        plt.xlabel("Measurement Interval (Batches)", fontsize=12)
+        plt.ylabel("Real Gradient Variance (log scale)", fontsize=12)
+        
+        # Adicionar as médias globais na legenda ou texto
+        stats_text = (f'Global Mean Variance:\n'
+                      f'DeltaGrad: {avg_var_dg:.2e}\n'
+                      f'Adam: {avg_var_adam:.2e}')
+        plt.gca().text(0.02, 0.05, stats_text, transform=plt.gca().transAxes, 
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
-def plot_variance_comparison(n_runs=5):
-    # Load data for both optimizers
-    # Replace strings with your actual naming convention if different
-    delta_data = load_variance_data("DeltaGrad", n_runs)
-    adam_data = load_variance_data("Adam", n_runs)
+        plt.legend(loc='upper left')
+        plt.grid(True, which="both", linestyle='--', alpha=0.4)
+        
+        # Guardar em PDF e PNG
+        plt.savefig("variance_comparison_stress_test.pdf", bbox_inches='tight')
+        plt.savefig("variance_comparison_stress_test.png", dpi=300, bbox_inches='tight')
+        plt.show()
 
-    plt.figure(figsize=(12, 6))
+        print(f"Variance plot saved. DG Avg: {avg_var_dg:.2e}, Adam Avg: {avg_var_adam:.2e}")
 
-    def plot_with_shading(data, label, color):
-        # Calculate mean and standard deviation across runs
-        mean_vals = np.mean(data, axis=0)
-        std_vals = np.std(data, axis=0)
-        iterations = np.arange(len(mean_vals))
-
-        # Plot the main average line
-        plt.plot(iterations, mean_vals, label=label, color=color, linewidth=1.5)
-        # Add shaded area for variance/uncertainty between runs
-        plt.fill_between(iterations, mean_vals - std_vals, mean_vals + std_vals, 
-                         color=color, alpha=0.2)
-
-    if delta_data.size > 0:
-        plot_with_shading(delta_data, "DeltaGrad", "teal")
-    
-    if adam_data.size > 0:
-        plot_with_shading(adam_data, "Adam", "orange")
-
-    plt.title("Gradient Variance Evolution During Training", fontsize=14)
-    plt.xlabel("Measurement Interval (Batches)", fontsize=12)
-    plt.ylabel("Real Gradient Variance", fontsize=12)
-    plt.yscale('log')  # Variance often spans orders of magnitude
-    plt.legend()
-    plt.grid(True, which="both", linestyle='--', alpha=0.5)
-
-    # Save outputs for documentation
-    plt.savefig("variance_comparison_log.pdf", bbox_inches='tight')
-    plt.savefig("variance_comparison_log.png", dpi=300, bbox_inches='tight')
-    
-    print("Variance comparison plots saved successfully.")
 
 
 def plot_accuracy_comparison(adam_accs, delta_accs):
@@ -284,31 +296,6 @@ def plot_accuracy_comparison(adam_accs, delta_accs):
     plt.savefig("accuracy_comparison_bars.png", dpi=300, bbox_inches='tight')
      
     print(f"Comparison plot saved. Adam: {means[0]:.2f}% | DeltaGrad: {means[1]:.2f}%")
-
-def calculate_save_metrics(results, optimizer_name):
-
-    mean_acc = np.mean(results)
-    std_dev = np.std(results)
-    
-    std_error = std_dev / np.sqrt(len(results))
-    
-    print(f"--- Metrics for {optimizer_name} ---")
-    print(f"Mean Accuracy: {mean_acc:.2f}%")
-    print(f"Standard Deviation: {std_dev:.2f}")
-    print(f"95% Confidence Interval: [{mean_acc - 1.96*std_error:.2f}, {mean_acc + 1.96*std_error:.2f}]")
-
-    filename = f"results_{optimizer_name.lower()}.txt"
-    
-    with open(filename, "w") as f:
-        f.write(f"Optimizer: {optimizer_name}\n")
-        f.write(f"Final Mean Accuracy: {mean_acc:.2f}%\n")
-        f.write(f"Standard Deviation: {std_dev:.4f}\n")
-        f.write("-" * 30 + "\n")
-        f.write("Individual Runs (Seeds):\n")
-        for i, res in enumerate(results):
-            f.write(f"Run {i+1}: {res:.2f}%\n")
-            
-    print(f"Results for {optimizer_name} saved to {filename}")
 
 
 

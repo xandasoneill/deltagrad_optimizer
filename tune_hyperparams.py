@@ -8,6 +8,7 @@ import optuna
 import joblib
 from model import ConvNet  
 from DeltaGrad import DeltaGrad
+import os
 
 def train_model(trial, model, optimizer, epochs=15):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,9 +28,9 @@ def train_model(trial, model, optimizer, epochs=15):
         generator=torch.Generator().manual_seed(42)
     )
 
-    # Batch size fixo em 16 para o Stress Test
-    trainloader = DataLoader(train_subset, batch_size=16, shuffle=True)
-    valloader = DataLoader(val_subset, batch_size=16, shuffle=False)
+    batch_size = trial.suggest_int("batch_size", 16, 16)
+    trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
+    valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
 
     for epoch in range(epochs):
         # FASE DE TREINO
@@ -98,6 +99,12 @@ def objective(trial, optimizer_name):
 
 if __name__ == "__main__":
     # Otimização para Adam
+
+    output_dir = "optuna_studies"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+
     print("Iniciando tuning do Adam...")
     study_Adam = optuna.create_study(direction="maximize")
     study_Adam.optimize(lambda trial: objective(trial, "Adam"), n_trials=20)
@@ -110,3 +117,11 @@ if __name__ == "__main__":
     joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad_fixed_b16.pkl")
     
     print("\nTuning done. Hiperparameters saved.")
+
+    study_path_adam = os.path.join(output_dir, "study_adam_b16_fixed.pkl")
+    joblib.dump(study_Adam, study_path_adam)
+
+    study_path_dg = os.path.join(output_dir, "study_deltagrad_b16_fixed.pkl")
+    joblib.dump(study_DeltaGrad, study_path_dg)
+
+    print(f"Studies saved in: {output_dir}")
