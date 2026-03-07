@@ -86,10 +86,6 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
     results_file = f"{optimizer_name}_results_batch{batch_size}_lr{best_params_to_pass['lr']}.pkl"
     joblib.dump(results, results_file)
 
-    load_and_plot_results()  # Load data from all runs and generate the R vs Variance plot
-    plot_variance_comparison(n_runs)  # Generate variance comparison plots for both optimizers
-
-    
     return end_accuracies, acc_history, r_history, variance_history, results_file
 
 if __name__ == "__main__":
