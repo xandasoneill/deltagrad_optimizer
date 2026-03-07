@@ -7,6 +7,7 @@ import torchvision
 import torchvision.transforms as transforms
 from model import ConvNet
 from visualizations import get_grad_variance
+import time
 
 def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
 
@@ -29,23 +30,32 @@ def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
 
     print(f"Training on: {device}")
 
+    experiment_start_time = time.time()
+
     # Data collection lists for analysis
     history_acc = []
     r_values = []
     variance_values = []
+    total_net_time = 0.0
+    time_stamps = []
 
     for epoch in range(epochs):
         # --- TRAINING PHASE ---
+
         model.train()
         running_loss = 0.0
 
         for i, (inputs, labels) in enumerate(trainloader):
+            start_batch = time.time()
+
             inputs, labels = inputs.to(device), labels.to(device)
             
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
+
+            total_net_time += (time.time() - start_batch)
 
             # --- DATA COLLECTION (R vs Gradient Variance) ---
             # Collect data every 5 batches to reduce computational overhead
@@ -74,12 +84,17 @@ def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
                 for p, g in zip([p for p in model.parameters() if p.grad is not None], original_grads):
                     p.grad = g
 
+            start_step = time.time()
             # Optimization step
             optimizer.step()
+            total_net_time += (time.time() - start_step)
+            
             running_loss += loss.item()
 
         # --- TESTING PHASE (Generalization Accuracy) ---
         # Evaluation mode: Disables dropout and BN updates for stable inference
+        start_eval = time.time()
+
         model.eval()
         test_correct = 0
         test_total = 0
@@ -92,11 +107,19 @@ def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
                 test_total += labels.size(0)
                 test_correct += (predicted == labels).sum().item()
         
+        # End evaluation and update time
+        total_net_time += (time.time() - start_eval)
+        
+        # Save the cumulative net time at the end of each epoch
+        time_stamps.append(total_net_time)
+
         # Calculate epoch metrics
         epoch_test_acc = 100 * test_correct / test_total
         history_acc.append(epoch_test_acc)
         epoch_loss = running_loss / len(trainloader)
+
+
         
         print(f"[{optimizer_name}] Epoch {epoch+1}/{epochs} | Loss: {epoch_loss:.4f} | Test Acc: {epoch_test_acc:.2f}%")
 
-    return history_acc, r_values, variance_values
+    return history_acc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time

@@ -5,11 +5,13 @@ import torch.optim as optim
 
 from model import ConvNet
 
-from visualizations import load_and_plot_results, plot_accuracy_comparison, plot_variance_comparison, plot_learning_curves, calculate_save_metrics
+from visualizations import load_and_plot_results, plot_accuracy_comparison, plot_variance_comparison, plot_learning_curves, plot_accuracy_evolution
 from engine import train_model
 
-best_params_deltagrad = joblib.load("best_params_DeltaGrad_fixed_b16.pkl")
-best_params_adam = joblib.load("best_params_Adam_fixed_b16.pkl")
+import time
+
+best_params_deltagrad = joblib.load("best_params_DeltaGrad_fixed_b16_epochs15.pkl")
+best_params_adam = joblib.load("best_params_Adam_fixed_b16_epochs15.pkl")
 
 
 
@@ -49,8 +51,9 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
         batch_size = best_params["batch_size"]
-        histacc, r_values, variance_values = train_model(model, optimizer, optimizer_name, best_params=best_params, batch=batch_size)
-
+        histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time = train_model(model, optimizer, optimizer_name, batch=batch_size)
+        experiment_start_time = time.ctime(experiment_start_time)
+        print(experiment_start_time)
         # Save R and variance values for plotting
         r_history.append(r_values)
 
@@ -67,35 +70,39 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
         print(f"Run {i+1}: Accuracy = {histacc[-1]:.4f}")
 
     results = {
-        "opimizer" : optimizer_name,
+        "optimizer" : optimizer_name,
+        "epochs" : 15,
+        "batch_size" : batch_size,
         "acc_history": acc_history,
         "r_history": r_history,
         "variance_history": variance_history,
-
+        "optimizer_hyperparameters": best_params_to_pass,
+        "timestamps" : time_stamps,
+        "start_time" : experiment_start_time,
+        "total_time" : total_net_time
 
     }
 
-    results_file = f"{optimizer_name}_results_batch{batch_size}_lr{best_params_to_pass["lr"]}.pkl"
+    results_file = f"{optimizer_name}_results_batch{batch_size}_lr{best_params_to_pass['lr']}.pkl"
     joblib.dump(results, results_file)
 
     load_and_plot_results()  # Load data from all runs and generate the R vs Variance plot
     plot_variance_comparison(n_runs)  # Generate variance comparison plots for both optimizers
 
-    calculate_save_metrics(adam_accuracies, "Adam")
-    calculate_save_metrics(deltagrad_accuracies, "Deltagrad") 
     
-    
-    return end_accuracies, acc_history, r_history, variance_history
+    return end_accuracies, acc_history, r_history, variance_history, results_file
 
 if __name__ == "__main__":
 
 
     print("Starting benchmark for Adam...")
-    adam_final_accuracies, adam_acc_history = run_benchmark(n_runs=5, optimizer_name="Adam")
+    adam_final_accuracies, adam_acc_history, results_adam = run_benchmark(n_runs=5, optimizer_name="Adam")
     print("Starting benchmark for DeltaGrad...")
-    deltagrad_final_accuracies, deltagrad_acc_history = run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
+    deltagrad_final_accuracies, deltagrad_acc_history, results_dg = run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
 
     plot_accuracy_comparison(adam_final_accuracies, deltagrad_final_accuracies)  # Generate accuracy comparison plot
-    plot_learning_curves(adam_acc_history, deltagrad_acc_history)  # Generate learning curves comparison plot  
+    plot_learning_curves(adam_acc_history, deltagrad_acc_history)  # Generate learning curves comparison plot 
+    plot_accuracy_evolution(results_dg, results_adam)
+    
 
 

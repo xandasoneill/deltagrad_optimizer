@@ -196,7 +196,7 @@ def plot_learning_curves(adam_histories, delta_histories):
 
 
 def plot_variance_comparison(results_file1, results_file2):
-    
+
     if os.path.exists(results_file1) and os.path.exists(results_file2):
         res1 = joblib.load(results_file1)
         res2 = joblib.load(results_file2)
@@ -250,8 +250,6 @@ def plot_variance_comparison(results_file1, results_file2):
         # Guardar em PDF e PNG
         plt.savefig("variance_comparison_stress_test.pdf", bbox_inches='tight')
         plt.savefig("variance_comparison_stress_test.png", dpi=300, bbox_inches='tight')
-        plt.show()
-
         print(f"Variance plot saved. DG Avg: {avg_var_dg:.2e}, Adam Avg: {avg_var_adam:.2e}")
 
 
@@ -299,5 +297,44 @@ def plot_accuracy_comparison(adam_accs, delta_accs):
 
 
 
+
+def plot_accuracy_evolution(results_dg, results_adam):
+    plt.figure(figsize=(10, 6))
+    
+    def get_stats(history):
+        matrix = np.array(history)
+        mean = np.mean(matrix, axis=0)
+        std = np.std(matrix, axis=0)
+        return mean, std
+
+    # Calcular estatísticas
+    dg_mean, dg_std = get_stats(results_dg["acc_history"])
+    adam_mean, adam_std = get_stats(results_adam["acc_history"])
+    epochs = np.arange(1, len(dg_mean) + 1)
+
+    # Plot DeltaGrad
+    plt.plot(epochs, dg_mean, label='DeltaGrad (Mean)', color='teal', linewidth=2)
+    plt.fill_between(epochs, dg_mean - dg_std, dg_mean + dg_std, color='teal', alpha=0.2)
+
+    # Plot Adam
+    plt.plot(epochs, adam_mean, label='Adam (Mean)', color='orange', linewidth=2)
+    plt.fill_between(epochs, adam_mean - adam_std, adam_mean + adam_std, color='orange', alpha=0.2)
+
+    # Adicionar média dos desvios como texto
+    avg_std_dg = np.mean(dg_std)
+    avg_std_adam = np.mean(adam_std)
+    stats_text = (f'Avg Std Dev:\nDG: {avg_std_dg:.2f}%\nAdam: {avg_std_adam:.2f}%')
+    plt.gca().text(0.02, 0.8, stats_text, transform=plt.gca().transAxes, 
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+    plt.title("Training Stability: Accuracy Evolution (5 Runs)", fontsize=14)
+    plt.xlabel("Epoch", fontsize=12)
+    plt.ylabel("Validation Accuracy (%)", fontsize=12)
+    plt.legend(loc='lower right')
+    plt.grid(True, linestyle='--', alpha=0.5)
+    
+    plt.savefig("accuracy_stability_comparison.pdf", bbox_inches='tight')
+    plt.savefig("accuracy_stability_comparison.png", dpi=300, bbox_inches='tight')
+    plt.show()
 
     
