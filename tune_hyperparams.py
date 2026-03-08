@@ -9,9 +9,17 @@ import joblib
 from model import ConvNet  
 from DeltaGrad import DeltaGrad
 import os
+import torch_directml
 
 def train_model(trial, model, optimizer, epochs=15):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if torch_directml.is_available():
+        device = torch_directml.device()
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+    
     criterion = nn.CrossEntropyLoss()
     
     transform = transforms.Compose([

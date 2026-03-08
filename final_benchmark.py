@@ -9,6 +9,7 @@ from visualizations import load_and_plot_results, plot_accuracy_comparison, plot
 from engine import train_model
 
 import time
+import torch_directml
 
 best_params_deltagrad = joblib.load("best_params_DeltaGrad_fixed_b16_epochs15.pkl")
 best_params_adam = joblib.load("best_params_Adam_fixed_b16_epochs15.pkl")
@@ -25,7 +26,16 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
     
     for i in range(n_runs):
 
-        model = ConvNet().to(torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+        if torch_directml.is_available():
+            device = torch_directml.device()
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
+        
+
+        model = ConvNet().to(device)
+        print(f"Model passed to device:{device}")
         
         if optimizer_name == "DeltaGrad":
             best_params = best_params_deltagrad
@@ -52,7 +62,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
         batch_size = best_params["batch_size"]
-        histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time = train_model(model, optimizer, optimizer_name, batch=batch_size)
+        histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device = train_model(model, optimizer, optimizer_name, batch=batch_size)
         experiment_start_time = time.ctime(experiment_start_time)
         print(experiment_start_time)
         # Save R and variance values for plotting
@@ -80,7 +90,8 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
         "optimizer_hyperparameters": best_params_to_pass,
         "timestamps" : time_stamps,
         "start_time" : experiment_start_time,
-        "total_time" : total_net_time
+        "total_time" : total_net_time,
+        "device" : device
 
     }
 

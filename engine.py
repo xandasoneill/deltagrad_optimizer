@@ -8,10 +8,18 @@ import torchvision.transforms as transforms
 from model import ConvNet
 from visualizations import get_grad_variance
 import time
+import torch_directml
 
 def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch_directml.is_available():
+
+        device = torch_directml.device()
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+    
     criterion = nn.CrossEntropyLoss()
     
     # Image preprocessing
@@ -122,4 +130,4 @@ def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
         
         print(f"[{optimizer_name}] Epoch {epoch+1}/{epochs} | Loss: {epoch_loss:.4f} | Test Acc: {epoch_test_acc:.2f}%")
 
-    return history_acc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time
+    return history_acc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device
