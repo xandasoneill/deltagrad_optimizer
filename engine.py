@@ -19,6 +19,8 @@ def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
+
+    device = torch.device("cpu")
     
     criterion = nn.CrossEntropyLoss()
     

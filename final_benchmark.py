@@ -5,7 +5,6 @@ import torch.optim as optim
 
 from model import ConvNet
 
-from visualizations import load_and_plot_results, plot_accuracy_comparison, plot_variance_comparison, plot_learning_curves, plot_accuracy_evolution
 from engine import train_model
 
 import time
@@ -32,7 +31,8 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             device = torch.device("cuda")
         else:
             device = torch.device("cpu")
-        
+
+        device = torch.device("cpu")
 
         model = ConvNet().to(device)
         print(f"Model passed to device:{device}")
