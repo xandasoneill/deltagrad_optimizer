@@ -36,8 +36,9 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
-
+            print(f"Using DeltaGrad with params: {best_params_to_pass}")
             optimizer = DeltaGrad(model.parameters(), **best_params_to_pass)
+            
         else:
             best_params = best_params_adam
             best_params_to_pass = best_params_adam.copy()
@@ -47,7 +48,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
-
+            print(f"Using Adam with params: {best_params_to_pass}")
             optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
         batch_size = best_params["batch_size"]
@@ -86,19 +87,14 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
     results_file = f"{optimizer_name}_results_batch{batch_size}_lr{best_params_to_pass['lr']}.pkl"
     joblib.dump(results, results_file)
 
-    return end_accuracies, acc_history, r_history, variance_history, results_file
-
 if __name__ == "__main__":
 
 
     print("Starting benchmark for Adam...")
-    adam_final_accuracies, adam_acc_history, results_adam = run_benchmark(n_runs=5, optimizer_name="Adam")
+    run_benchmark(n_runs=5, optimizer_name="Adam")
     print("Starting benchmark for DeltaGrad...")
-    deltagrad_final_accuracies, deltagrad_acc_history, results_dg = run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
+    run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
 
-    plot_accuracy_comparison(adam_final_accuracies, deltagrad_final_accuracies)  # Generate accuracy comparison plot
-    plot_learning_curves(adam_acc_history, deltagrad_acc_history)  # Generate learning curves comparison plot 
-    plot_accuracy_evolution(results_dg, results_adam)
     
 
 
