@@ -101,8 +101,8 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
 if __name__ == "__main__":
 
 
-    print("Starting benchmark for Adam...")
-    run_benchmark(n_runs=5, optimizer_name="Adam")
+    #print("Starting benchmark for Adam...")
+    #run_benchmark(n_runs=5, optimizer_name="Adam")
     print("Starting benchmark for DeltaGrad...")
     run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
 
