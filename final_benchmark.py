@@ -42,7 +42,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params_to_pass = best_params_deltagrad.copy()
             
             # Triple learning rate here
-            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
+            #best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
@@ -54,14 +54,14 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params_to_pass = best_params_adam.copy()
 
             # Triple learning rate here
-            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
+            #best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
             print(f"Using Adam with params: {best_params_to_pass}")
             optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
-        batch_size = best_params["batch_size"]
+        batch_size = 64
         histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device = train_model(model, optimizer, optimizer_name, batch=batch_size)
         experiment_start_time = time.ctime(experiment_start_time)
         print(experiment_start_time)
@@ -101,8 +101,8 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
 if __name__ == "__main__":
 
 
-    #print("Starting benchmark for Adam...")
-    #run_benchmark(n_runs=5, optimizer_name="Adam")
+    print("Starting benchmark for Adam...")
+    run_benchmark(n_runs=5, optimizer_name="Adam")
     print("Starting benchmark for DeltaGrad...")
     run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
 
