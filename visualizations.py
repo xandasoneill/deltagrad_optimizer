@@ -45,29 +45,34 @@ def get_grad_variance(model, criterion, inputs, labels, num_samples=8):
     return variance
 
 
-def load_and_plot_results(results_file, optimizer_name):
+def load_and_plot_results(results_file_deltagrad, results_file_adam):
 
-    if optimizer_name == "DeltaGrad":
 
-        if os.path.exists(results_file):
+    if os.path.exists(results_file_deltagrad):
 
-            results = joblib.load(results_file)
-            v_history = results["variance_history"] # Lista de listas (5 x iterações)
-            r_history = results["r_history"]        # Lista de listas (5 x iterações)
+        results_deltagrad = joblib.load(results_file_deltagrad)
+        v_history = results_deltagrad["variance_history"] # Lista de listas (5 x iterações)
+        r_history = results_deltagrad["r_history"]        # Lista de listas (5 x iterações)
 
-            if len(v_history) == len(r_history):
-                # 1. Gera os gráficos individuais de cada run
-                for i in range(len(v_history)):
-                    plot_individual_run(r_history[i], v_history[i], run_id=i+1)
-                
-                # 2. Gera o "Killer Plot" com todas as runs juntas
-                plot_all_runs_combined(r_history, v_history)
-            else:
-                print("Variance history is not the same size as R history!")
-
+        if len(v_history) == len(r_history):
+            # 1. Gera os gráficos individuais de cada run
+            for i in range(len(v_history)):
+                plot_individual_run(r_history[i], v_history[i], run_id=i+1)
+            
+            # 2. Gera o "Killer Plot" com todas as runs juntas
+            plot_all_runs_combined(r_history, v_history)
         else:
+            print("Variance history is not the same size as R history!")
 
-            print("Results file path does not exist!")
+    else:
+
+        print("Results file path does not exist!")
+
+    if os.path.exists(results_file_adam):
+
+        results_adam = joblib.load(results_file_adam)
+
+    plot_accuracy_evolution(results_deltagrad, results_adam)
 
 
 

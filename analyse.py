@@ -1,3 +1,3 @@
 from visualizations import load_and_plot_results, plot_accuracy_comparison, plot_variance_comparison, plot_learning_curves, plot_accuracy_evolution
 
-load_and_plot_results("DeltaGrad_results_batch16_lr0.03194028510565753.pkl","DeltaGrad")
+load_and_plot_results("./results_fixedbs16/DeltaGrad_results_batch16_lr0.0958208553169726.pkl","./results_fixedbs16/Adam_results_batch16_lr0.0005221157825505848.pkl")
