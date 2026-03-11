@@ -8,7 +8,7 @@ from model import ConvNet
 from engine import train_model
 
 import time
-import torch_directml
+# import torch_directml
 
 best_params_deltagrad = joblib.load("best_params_DeltaGrad_fixed_b16_epochs15.pkl")
 best_params_adam = joblib.load("best_params_Adam_fixed_b16_epochs15.pkl")
@@ -25,12 +25,12 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
     
     for i in range(n_runs):
 
-        if torch_directml.is_available():
-            device = torch_directml.device()
-        elif torch.cuda.is_available():
-            device = torch.device("cuda")
-        else:
-            device = torch.device("cpu")
+        # if torch_directml.is_available():
+        #     device = torch_directml.device()
+        # elif torch.cuda.is_available():
+        #     device = torch.device("cuda")
+        # else:
+        #     device = torch.device("cpu")
 
         device = torch.device("cpu")
 
@@ -41,8 +41,8 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params = best_params_deltagrad
             best_params_to_pass = best_params_deltagrad.copy()
             
-            # Triple learning rate here
-            #best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
+            # X learning rate here
+            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 9
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
@@ -53,15 +53,15 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params = best_params_adam
             best_params_to_pass = best_params_adam.copy()
 
-            # Triple learning rate here
-            #best_params_to_pass["lr"] = best_params_to_pass["lr"] * 3
+            # X learning rate here
+            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 9
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
             print(f"Using Adam with params: {best_params_to_pass}")
             optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
-        batch_size = 64
+        batch_size = 16
         histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device = train_model(model, optimizer, optimizer_name, batch=batch_size)
         experiment_start_time = time.ctime(experiment_start_time)
         print(experiment_start_time)

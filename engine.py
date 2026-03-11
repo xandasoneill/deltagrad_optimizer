@@ -8,17 +8,17 @@ import torchvision.transforms as transforms
 from model import ConvNet
 from visualizations import get_grad_variance
 import time
-import torch_directml
+#import torch_directml
 
 def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
 
-    if torch_directml.is_available():
+    # if torch_directml.is_available():
 
-        device = torch_directml.device()
-    elif torch.cuda.is_available():
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
+    #     device = torch_directml.device()
+    # elif torch.cuda.is_available():
+    #     device = torch.device("cuda")
+    # else:
+    #     device = torch.device("cpu")
 
     device = torch.device("cpu")
     
