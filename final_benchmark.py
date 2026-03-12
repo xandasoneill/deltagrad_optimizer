@@ -21,8 +21,10 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
     acc_history = []
     r_history = []
     variance_history = []
+    total_net_time_history = []
+    time_stamps_history = []
+    experiment_start_time_history = []
 
-    
     for i in range(n_runs):
 
         # if torch_directml.is_available():
@@ -67,8 +69,11 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
         print(experiment_start_time)
         # Save R and variance values for plotting
         r_history.append(r_values)
-
         variance_history.append(variance_values)
+        total_net_time_history.append(total_net_time)
+        time_stamps_history.append(time_stamps)
+        experiment_start_time_history.append(experiment_start_time)
+
         
         if optimizer_name == "DeltaGrad":
 
@@ -81,6 +86,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
         print(f"Run {i+1}: Accuracy = {histacc[-1]:.4f}")
 
     results = {
+
         "optimizer" : optimizer_name,
         "epochs" : 15,
         "batch_size" : batch_size,
@@ -88,10 +94,11 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
         "r_history": r_history,
         "variance_history": variance_history,
         "optimizer_hyperparameters": best_params_to_pass,
-        "timestamps" : time_stamps,
-        "start_time" : experiment_start_time,
-        "total_time" : total_net_time,
-        "device" : device
+        "timestamps" : time_stamps_history,
+        "start_time" : experiment_start_time_history,
+        "total_time" : total_net_time_history,
+        "device" : device,
+        "number_runs" : n_runs
 
     }
 
