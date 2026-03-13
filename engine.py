@@ -134,4 +134,4 @@ def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
         
         print(f"[{optimizer_name}] Epoch {epoch+1}/{epochs} | Loss: {epoch_loss:.4f} | Test Acc: {epoch_test_acc:.2f}%")
 
-    return history_acc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device, loss
+    return history_acc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device, loss_epoch_list
