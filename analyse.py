@@ -6,4 +6,4 @@ results_dg =joblib.load("results/results_lrtest/results_values/normal_lr/DeltaGr
 load_and_plot_results(results_dg, results_adam)
 print(results_adam["total_time"])
 print(results_dg["total_time"])
-plot_mean_time_per_epoch(results_adam["timestamps"], results_dg["timestamps"])
+plot_mean_time_per_epoch(results_adam["all_timestamps"], results_dg["all_timestamps"])

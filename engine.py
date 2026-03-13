@@ -48,6 +48,7 @@ def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
     variance_values = []
     total_net_time = 0.0
     time_stamps = []
+    loss = []
 
     for epoch in range(epochs):
         # --- TRAINING PHASE ---
@@ -127,9 +128,10 @@ def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
         epoch_test_acc = 100 * test_correct / test_total
         history_acc.append(epoch_test_acc)
         epoch_loss = running_loss / len(trainloader)
+        loss.append(epoch_loss)
 
 
         
         print(f"[{optimizer_name}] Epoch {epoch+1}/{epochs} | Loss: {epoch_loss:.4f} | Test Acc: {epoch_test_acc:.2f}%")
 
-    return history_acc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device
+    return history_acc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device, loss
