@@ -74,7 +74,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
         batch_size = 16
-        histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device , loss = train_model(model, optimizer, optimizer_name, batch=batch_size)
+        histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device , loss_list = train_model(model, optimizer, optimizer_name, batch=batch_size)
         experiment_start_time = time.ctime(experiment_start_time)
         print(experiment_start_time)
         # Save R and variance values for plotting
@@ -83,7 +83,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
         total_net_time_history.append(total_net_time)
         time_stamps_history.append(time_stamps)
         experiment_start_time_history.append(experiment_start_time)
-        loss_history.append(loss)
+        loss_history.append(loss_list)
 
         
         if optimizer_name == "DeltaGrad":
