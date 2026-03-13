@@ -44,7 +44,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params_to_pass = best_params_deltagrad.copy()
             
             # X learning rate here
-            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 9
+            best_params_to_pass["lr"] = best_params_to_pass["lr"] 
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
@@ -56,7 +56,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params_to_pass = best_params_adam.copy()
 
             # X learning rate here
-            best_params_to_pass["lr"] = best_params_to_pass["lr"] * 9
+            best_params_to_pass["lr"] = best_params_to_pass["lr"] 
             
             if "batch_size" in best_params_to_pass:
                 best_params_to_pass.pop("batch_size")
