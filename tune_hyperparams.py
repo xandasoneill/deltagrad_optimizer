@@ -40,7 +40,7 @@ def train_model(trial, model, optimizer, epochs=15):
     )
 
     # Fixed batch size for reproducibility in the study 
-    batch_size = trial.suggest_int("batch_size", 16, 256)
+    batch_size = trial.suggest_int("batch_size", 64, 64)
     trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
     valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
 
@@ -93,7 +93,7 @@ def objective(trial, optimizer_name):
         gamma = trial.suggest_float("gamma", 0.5, 1.0)
         alpha = trial.suggest_float("alpha", 0.1, 0.9)
         beta = trial.suggest_float("beta", 0.5, 0.99)
-        k_val = trial.suggest_int("K", 3, 3) # Window size for stability 
+        k_val = trial.suggest_int("K", 2, 8) # Window size for stability 
         smooth = trial.suggest_float("smoothing", 0.0001, 0.1)
         
         optimizer = DeltaGrad(
@@ -116,24 +116,24 @@ if __name__ == "__main__":
         os.makedirs(output_dir)
 
     # 1. Tuning for Adam
-    #print("Starting Adam tuning...")
-    #study_Adam = optuna.create_study(direction="maximize")
-    #study_Adam.optimize(lambda trial: objective(trial, "Adam"), n_trials=20)
-    #joblib.dump(study_Adam.best_params, "best_params_Adam_fixed_b16_epochs15.pkl")
+    print("Starting Adam tuning...")
+    study_Adam = optuna.create_study(direction="maximize")
+    study_Adam.optimize(lambda trial: objective(trial, "Adam"), n_trials=20)
+    joblib.dump(study_Adam.best_params, "best_params_Adam_fixed_b64_epochs15.pkl")
 
     # 2. Tuning for DeltaGrad
     print("\nStarting DeltaGrad tuning...")
     study_DeltaGrad = optuna.create_study(direction="maximize")
     study_DeltaGrad.optimize(lambda trial: objective(trial, "DeltaGrad"), n_trials=20)
-    joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad_k3_epochs15.pkl")
+    joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad_fixed_b64_epochs15.pkl")
     
     print("\nTuning complete. Best hyperparameters saved.")
 
     # Save full Optuna study objects for audit and visualization 
-    #study_path_adam = os.path.join(output_dir, "study_adam_b16_fixed_epochs15.pkl")
-    #joblib.dump(study_Adam, study_path_adam)
+    study_path_adam = os.path.join(output_dir, "study_adam_b64_fixed_epochs15.pkl")
+    joblib.dump(study_Adam, study_path_adam)
 
-    study_path_dg = os.path.join(output_dir, "study_deltagrad_k3_epochs15.pkl")
+    study_path_dg = os.path.join(output_dir, "study_deltagrad_b64_fixed_epochs15.pkl")
     joblib.dump(study_DeltaGrad, study_path_dg)
 
     print(f"Study objects stored in: {output_dir}")
