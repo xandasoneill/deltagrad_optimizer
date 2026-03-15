@@ -70,7 +70,7 @@ def load_and_plot_results(results_deltagrad, results_adam):
 
 def plot_all_runs_combined(r_history_list, v_history_list):
 
-    plt.figure(figsize=(12, 7))
+    plt.figure(figsize=(10, 6))
     
     # Paleta profissional expandida
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
@@ -103,14 +103,15 @@ def plot_all_runs_combined(r_history_list, v_history_list):
     p_text = f"{global_p:.2e}" if global_p < 0.001 else f"{global_p:.4f}"
 
     mean_corr = np.mean(all_pearsons)
-    plt.title(f"DeltaGrad Multi-Run Analysis: Reliability R vs Variance\n"
-              f"Global r: {global_r:.3f} | p-value: {p_text}", fontsize=14)
-    
-    plt.xlabel("Reliability Metric R (Network Average)", fontsize=12)
-    plt.ylabel("Real Gradient Variance (p)", fontsize=12)
-    plt.legend(loc='upper right', fontsize=9, ncol=2 if len(r_history_list) <= 5 else 3)
+
+    plt.xlabel("Reliability Metric R (Network Average)", fontsize=25)
+    plt.ylabel("Real Gradient Variance (p)", fontsize=25)
+    plt.legend(loc='upper right', fontsize=22, ncol=2 if len(r_history_list) <= 5 else 3)
     plt.grid(True, linestyle='--', alpha=0.3)
+    plt.xticks(fontsize=25) # Aumenta os números do eixo X
+    plt.yticks(fontsize=25) # Aumenta os números do eixo Y
     
+    plt.tight_layout()
     # Gravação obrigatória em PDF para o paper
     plt.savefig("deltagrad_combined_correlation.pdf", bbox_inches='tight')
     plt.savefig("deltagrad_combined_correlation.png", dpi=300, bbox_inches='tight')
@@ -120,7 +121,7 @@ def plot_all_runs_combined(r_history_list, v_history_list):
 
 
 def plot_individual_run(r_values, variance_values, run_id):
-    plt.figure(figsize=(8, 5))
+    plt.figure(figsize=(5, 4))
     
     # Calcular Pearson e p-value
     pearson_val, p_val = pearsonr(r_values, variance_values)
@@ -134,7 +135,7 @@ def plot_individual_run(r_values, variance_values, run_id):
                 line_kws={'color': 'red', 'linewidth': 2})
     
     # Título com r e p
-    plt.title(f"Run {run_id}: R vs. Variance\n(r={pearson_val:.3f}, p={p_text})", fontsize=12)
+  
     plt.xlabel("Reliability Metric R", fontsize=10)
     plt.ylabel("Gradient Variance", fontsize=10)
     plt.grid(True, linestyle='--', alpha=0.5)
