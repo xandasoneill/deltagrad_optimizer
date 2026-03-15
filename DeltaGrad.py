@@ -43,7 +43,6 @@ class DeltaGrad(Optimizer):
             eps = group['epsilon']
 
             # Pre-calculate exponential weights for vectorized history
-            # This replaces the manual 'for j' loop
             alpha_weights = torch.tensor([alpha**i for i in range(K)], device=group['params'][0].device)
             beta_weights = torch.tensor([beta**(i+1) for i in range(K)], device=group['params'][0].device)
 
