@@ -12,6 +12,8 @@ from scipy.stats import pearsonr, spearmanr
 
 import joblib
 
+from matplotlib.ticker import MaxNLocator 
+
 
 
 def get_grad_variance(model, criterion, inputs, labels, num_samples=8):
@@ -106,10 +108,17 @@ def plot_all_runs_combined(r_history_list, v_history_list):
 
     plt.xlabel("Reliability Metric R (Network Average)", fontsize=25)
     plt.ylabel("Real Gradient Variance (p)", fontsize=25)
-    plt.legend(loc='upper right', fontsize=22, ncol=2 if len(r_history_list) <= 5 else 3)
+    plt.legend(loc='upper right', 
+           fontsize=25, 
+           ncol=2 if len(r_history_list) <= 5 else 3,
+           columnspacing=0.5,  
+           handletextpad=0.2,   
+           borderaxespad=0.2)   
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.xticks(fontsize=25) # Aumenta os números do eixo X
     plt.yticks(fontsize=25) # Aumenta os números do eixo Y
+
+    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=4))
     
     plt.tight_layout()
     # Gravação obrigatória em PDF para o paper
@@ -121,7 +130,7 @@ def plot_all_runs_combined(r_history_list, v_history_list):
 
 
 def plot_individual_run(r_values, variance_values, run_id):
-    plt.figure(figsize=(5, 4))
+    plt.figure(figsize=(10, 6))
     
     # Calcular Pearson e p-value
     pearson_val, p_val = pearsonr(r_values, variance_values)
@@ -179,11 +188,12 @@ def plot_learning_curves(adam_histories, delta_histories):
     plt.plot(epochs, delta_mean, color='darkslategrey', linewidth=2.5, label="DeltaGrad (Mean)")
 
     # Chart formatting
-    plt.title("Learning Curves Comparison: Adam vs DeltaGrad", fontsize=14)
-    plt.xlabel("Epochs", fontsize=12)
-    plt.ylabel("Accuracy (%)", fontsize=12)
-    plt.legend(loc='lower right')
+    plt.xlabel("Epochs", fontsize=25)
+    plt.ylabel("Accuracy (%)", fontsize=25)
+    plt.legend(loc='lower right', fontsize = 22)
     plt.grid(True, linestyle='--', alpha=0.6)
+    plt.xticks(fontsize=25) # Aumenta os números do eixo X
+    plt.yticks(fontsize=25)
     
     # Save for Overleaf/LaTeX (PDF) and local view (PNG)
     plt.savefig("learning_curves_comparison.pdf", bbox_inches='tight')
@@ -201,7 +211,7 @@ def plot_accuracy_comparison(adam_accs, delta_accs):
     stds = [np.std(adam_accs), np.std(delta_accs)]
     labels = ['Adam', 'DeltaGrad']
     
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(10, 6))
     x_pos = np.arange(len(labels))
     
     # Create bars with colors
@@ -236,6 +246,7 @@ def plot_accuracy_comparison(adam_accs, delta_accs):
 
 
 def plot_accuracy_evolution(results_dg, results_adam):
+
     plt.figure(figsize=(10, 6))
     
     def get_stats(history):
@@ -261,23 +272,24 @@ def plot_accuracy_evolution(results_dg, results_adam):
     avg_std_dg = np.mean(dg_std)
     avg_std_adam = np.mean(adam_std)
     stats_text = (f'Avg Std Dev:\nDG: {avg_std_dg:.2f}%\nAdam: {avg_std_adam:.2f}%')
-    plt.gca().text(0.02, 0.8, stats_text, transform=plt.gca().transAxes, 
-                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    plt.gca().text(0.02, 0.05, stats_text, transform=plt.gca().transAxes, fontsize=25,
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
 
-    plt.title("Training Stability: Accuracy Evolution (5 Runs)", fontsize=14)
-    plt.xlabel("Epoch", fontsize=12)
-    plt.ylabel("Validation Accuracy (%)", fontsize=12)
-    plt.legend(loc='lower right')
+
+    plt.xlabel("Epoch", fontsize=25)
+    plt.ylabel("Validation Accuracy (%)", fontsize=25)
+    plt.legend(loc='lower right', fontsize = 23)
     plt.grid(True, linestyle='--', alpha=0.5)
+    plt.xticks(fontsize=25) # Aumenta os números do eixo X
+    plt.yticks(fontsize=25)
     
     plt.savefig("accuracy_stability_comparison.pdf", bbox_inches='tight')
     plt.savefig("accuracy_stability_comparison.png", dpi=300, bbox_inches='tight')
-    plt.show()
 
 
 def plot_variance_comparison(results_dg, results_adam):
         
-    plt.figure(figsize=(12, 7))
+    plt.figure(figsize=(10, 6))
     
     # Cores para o gráfico
     dg_color, adam_color = 'teal', 'orange'
@@ -303,18 +315,20 @@ def plot_variance_comparison(results_dg, results_adam):
 
     # Configurações do gráfico
     plt.yscale('log') # Escala logarítmica é vital para variância
-    plt.title("Gradient Variance Evolution: DeltaGrad vs Adam", fontsize=14)
-    plt.xlabel("Measurement Interval (Batches)", fontsize=12)
-    plt.ylabel("Real Gradient Variance (log scale)", fontsize=12)
+    plt.xlabel("Batches", fontsize=25)
+    plt.ylabel("Real Gradient Variance", fontsize=22)
+    plt.xticks(fontsize=25) # Aumenta os números do eixo X
+    plt.yticks(fontsize=25)
     
     # Adicionar as médias globais na legenda ou texto
     stats_text = (f'Global Mean Variance:\n'
                     f'DeltaGrad: {avg_var_dg:.2e}\n'
                     f'Adam: {avg_var_adam:.2e}')
     plt.gca().text(0.02, 0.05, stats_text, transform=plt.gca().transAxes, 
+                    fontsize=20,
                     bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
-    plt.legend(loc='upper left')
+    plt.legend(loc='lower right', fontsize=20)
     plt.grid(True, which="both", linestyle='--', alpha=0.4)
     
     # Guardar em PDF e PNG
@@ -348,7 +362,7 @@ def plot_mean_time_per_epoch(adam_runs_stamps, dg_runs_stamps):
     dg_std = np.std(dg_matrix, axis=0)
 
     epochs = np.arange(1, len(adam_mean) + 1)
-    plt.figure(figsize=(11, 6))
+    plt.figure(figsize=(10, 6))
     
     bar_width = 0.35
 
@@ -365,19 +379,26 @@ def plot_mean_time_per_epoch(adam_runs_stamps, dg_runs_stamps):
     plt.axhline(y=global_avg_adam, color='darkorange', linestyle='--', alpha=0.5)
     plt.axhline(y=global_avg_dg, color='darkslategrey', linestyle='--', alpha=0.5)
 
-    plt.xlabel('Epoch', fontsize=12)
-    plt.ylabel('Time per Epoch (seconds)', fontsize=12)
-    plt.title('Mean Computational Efficiency (5 Runs Comparison)', fontsize=14)
+    plt.xlabel('Epoch', fontsize=25)
+    plt.ylabel('Time per Epoch (seconds)', fontsize=25)
     plt.xticks(epochs)
+    plt.xticks(fontsize=25) # Aumenta os números do eixo X
+    plt.yticks(fontsize=25)
     
-    # Adicionar legenda com tempos médios globais
-    plt.legend([f'Adam (Avg: {global_avg_adam:.1f}s)', 
-                f'DeltaGrad (Avg: {global_avg_dg:.1f}s)'], 
-               loc='upper left', bbox_to_anchor=(1, 1))
+   
+    stats_text = (f'Adam (Avg: {global_avg_adam:.1f}s)\n'
+                f'DeltaGrad (Avg: {global_avg_dg:.1f}s)')
 
+    plt.gca().text(0.98, 0.05, stats_text, 
+                transform=plt.gca().transAxes, 
+                fontsize=20, 
+                horizontalalignment='right',
+                verticalalignment='bottom',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='gray'))
+    
     overhead = (global_avg_dg / global_avg_adam - 1) * 100
-    plt.text(0.02, 0.93, f"Avg Overhead: {overhead:.1f}%", transform=plt.gca().transAxes, 
-             fontsize=12, fontweight='bold', bbox=dict(facecolor='white', alpha=0.8))
+    plt.text(0.02, 0.05, f"Avg Overhead: {overhead:.1f}%", transform=plt.gca().transAxes, 
+             fontsize=20, fontweight='bold', bbox=dict(facecolor='white', alpha=0.8))
 
     plt.grid(axis='y', linestyle='--', alpha=0.3)
     plt.tight_layout()
