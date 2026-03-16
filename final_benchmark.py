@@ -73,7 +73,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             print(f"Using Adam with params: {best_params_to_pass}")
             optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
-        batch_size = 8
+        batch_size = 64
         histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device , loss_list = train_model(model, optimizer, optimizer_name, batch=batch_size)
         experiment_start_time = time.ctime(experiment_start_time)
         print(experiment_start_time)
