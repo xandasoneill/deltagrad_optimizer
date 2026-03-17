@@ -40,7 +40,7 @@ def train_model(trial, model, optimizer, epochs=15):
     )
 
     # Fixed batch size for reproducibility in the study 
-    batch_size = trial.suggest_int("batch_size", 64, 64)
+    batch_size = trial.suggest_int("batch_size", 512, 512)
     trainloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
     valloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
 
@@ -119,21 +119,21 @@ if __name__ == "__main__":
     print("Starting Adam tuning...")
     study_Adam = optuna.create_study(direction="maximize")
     study_Adam.optimize(lambda trial: objective(trial, "Adam"), n_trials=20)
-    joblib.dump(study_Adam.best_params, "best_params_Adam_fixed_b64_epochs15.pkl")
+    joblib.dump(study_Adam.best_params, "best_params_Adam_fixed_b512_epochs15.pkl")
 
     # 2. Tuning for DeltaGrad
     print("\nStarting DeltaGrad tuning...")
     study_DeltaGrad = optuna.create_study(direction="maximize")
     study_DeltaGrad.optimize(lambda trial: objective(trial, "DeltaGrad"), n_trials=20)
-    joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad_fixed_b64_epochs15.pkl")
+    joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad_fixed_b512_epochs15.pkl")
     
     print("\nTuning complete. Best hyperparameters saved.")
 
     # Save full Optuna study objects for audit and visualization 
-    study_path_adam = os.path.join(output_dir, "study_adam_b64_fixed_epochs15.pkl")
+    study_path_adam = os.path.join(output_dir, "study_adam_b512_fixed_epochs15.pkl")
     joblib.dump(study_Adam, study_path_adam)
 
-    study_path_dg = os.path.join(output_dir, "study_deltagrad_b64_fixed_epochs15.pkl")
+    study_path_dg = os.path.join(output_dir, "study_deltagrad_b512_fixed_epochs15.pkl")
     joblib.dump(study_DeltaGrad, study_path_dg)
 
     print(f"Study objects stored in: {output_dir}")
