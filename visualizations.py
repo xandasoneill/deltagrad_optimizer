@@ -67,6 +67,7 @@ def load_and_plot_results(results_deltagrad, results_adam):
 
     plot_accuracy_evolution(results_deltagrad, results_adam)
     plot_variance_comparison(results_deltagrad, results_adam)
+    plot_combined_loss(results_adam, results_deltagrad, adam_label="Adam", dg_label="DeltaGrad")
 
 
 
@@ -404,3 +405,65 @@ def plot_mean_time_per_epoch(adam_runs_stamps, dg_runs_stamps):
     plt.tight_layout()
     plt.savefig('mean_time_per_epoch.png', dpi=300)
     plt.savefig('mean_time_per_epoch.pdf')
+
+
+def plot_combined_loss(adam_results, dg_results, adam_label="Adam", dg_label="DeltaGrad"):
+    """
+    Plots training loss for both Adam and DeltaGrad on a single chart.
+    Now receives result dictionaries directly.
+    """
+    
+    # 1. Extract and convert to NumPy arrays to enable .shape and math operations
+    # adam_results["loss_history"] is likely a list of lists, np.array() fixes it.
+    adam_data = np.array(adam_results["loss_history"])
+    dg_data = np.array(dg_results["loss_history"])
+    
+    # 2. Get dimensions (Number of epochs is the second dimension)
+    num_epochs = adam_data.shape[1]
+    epochs = np.arange(1, num_epochs + 1)
+    
+    # Colors for consistency
+    colors = {'Adam': '#ff7f0e', 'DeltaGrad': '#008080'}
+    
+    plt.figure(figsize=(10, 6))
+    sns.set_style("whitegrid")
+
+    # 3. Plotting logic for both optimizers
+    for data, label, color in [(adam_data, adam_label, colors['Adam']), 
+                               (dg_data, dg_label, colors['DeltaGrad'])]:
+        
+        # Calculate statistics across runs (axis=0)
+        mean_loss = np.mean(data, axis=0)
+        std_loss = np.std(data, axis=0)
+        
+        # Plot individual runs (faint lines)
+        for run in data:
+            plt.plot(epochs, run, alpha=0.08, color=color, linewidth=1)
+            
+        # Plot Global Mean
+        plt.plot(epochs, mean_loss, color=color, linewidth=3.5, label=f'{label} (Mean)')
+        
+        # Shaded area for standard deviation (Stability)
+        plt.fill_between(epochs, mean_loss - std_loss, mean_loss + std_loss, 
+                         color=color, alpha=0.2, label=f'{label} $\pm$ Std Dev')
+
+    # 4. Scientific Formatting
+    plt.xlabel('Epoch', fontsize=22, fontweight='bold')
+    plt.ylabel('Training Loss', fontsize=22, fontweight='bold')
+    plt.title('Loss Convergence Comparison: Adam vs. DeltaGrad', fontsize=24, pad=25)
+    
+    # Ensure epoch ticks are integers and visible
+    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+    
+    plt.xticks(fontsize=25)
+    plt.yticks(fontsize=25)
+    
+    # Legend
+    plt.legend(fontsize=20, loc='upper right', frameon=True, framealpha=0.9)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    
+    plt.tight_layout()
+    
+    # 5. Save outputs
+    plt.savefig("loss_comparison_combined.png", dpi=300, bbox_inches='tight')
+    plt.savefig("loss_comparison_combined.pdf", bbox_inches='tight')
