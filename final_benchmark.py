@@ -73,8 +73,12 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             print(f"Using Adam with params: {best_params_to_pass}")
             optimizer = optim.Adam(model.parameters(), **best_params_to_pass)
         
-        batch_size = 64
-        histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device , loss_list = train_model(model, optimizer, optimizer_name, batch=batch_size)
+        batch_size = 512
+        n_epochs = 50
+        histacc, r_values, variance_values, total_net_time, time_stamps, experiment_start_time, device , loss_list = train_model(model, 
+                                                                                                                                 optimizer, optimizer_name, 
+                                                                                                                                 epochs=n_epochs, 
+                                                                                                                                 batch=batch_size)
         experiment_start_time = time.ctime(experiment_start_time)
         print(experiment_start_time)
         # Save R and variance values for plotting
@@ -98,7 +102,7 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
 
     results = {
         "optimizer": optimizer_name,
-        "epochs": 15,
+        "epochs": n_epochs,
         "batch_size": batch_size,
         "number_runs": n_runs,
         "dataset": "CIFAR-100", 

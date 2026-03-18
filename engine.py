@@ -10,7 +10,7 @@ from visualizations import get_grad_variance
 import time
 #import torch_directml
 
-def train_model(model, optimizer, optimizer_name, epochs=15, batch=None):
+def train_model(model, optimizer, optimizer_name, epochs=50, batch=None):
 
     # if torch_directml.is_available():
 
