@@ -11,8 +11,8 @@ import time
 import numpy as np
 # import torch_directml
 
-best_params_deltagrad = joblib.load("best_params_DeltaGrad_fixed_b64_epochs15.pkl")
-best_params_adam = joblib.load("best_params_Adam_fixed_b64_epochs15.pkl")
+best_params_deltagrad = joblib.load("best_params_DeltaGrad_fixed_b512_epochs50.pkl")
+best_params_adam = joblib.load("best_params_Adam_fixed_b512_epochs50.pkl")
 
 
 
