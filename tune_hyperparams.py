@@ -9,16 +9,16 @@ import joblib
 from model import ConvNet  
 from DeltaGrad import DeltaGrad
 import os
-import torch_directml
+# import torch_directml
 
-def train_model(trial, model, optimizer, epochs=15):
+def train_model(trial, model, optimizer, epochs=50):
 
-    if torch_directml.is_available():
-        device = torch_directml.device()
-    elif torch.cuda.is_available():
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
+    # if torch_directml.is_available():
+    #     device = torch_directml.device()
+    # elif torch.cuda.is_available():
+    #     device = torch.device("cuda")
+    # else:
+    #     device = torch.device("cpu")
 
     device = torch.device("cpu")
     
@@ -106,7 +106,7 @@ def objective(trial, optimizer_name):
             smoothing=smooth
         )
 
-    accuracy = train_model(trial, model, optimizer, epochs=15)
+    accuracy = train_model(trial, model, optimizer, epochs=50)
     return accuracy
 
 if __name__ == "__main__":
@@ -119,21 +119,21 @@ if __name__ == "__main__":
     print("Starting Adam tuning...")
     study_Adam = optuna.create_study(direction="maximize")
     study_Adam.optimize(lambda trial: objective(trial, "Adam"), n_trials=20)
-    joblib.dump(study_Adam.best_params, "best_params_Adam_fixed_b512_epochs15.pkl")
+    joblib.dump(study_Adam.best_params, "best_params_Adam_fixed_b512_epochs50.pkl")
 
     # 2. Tuning for DeltaGrad
     print("\nStarting DeltaGrad tuning...")
     study_DeltaGrad = optuna.create_study(direction="maximize")
     study_DeltaGrad.optimize(lambda trial: objective(trial, "DeltaGrad"), n_trials=20)
-    joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad_fixed_b512_epochs15.pkl")
+    joblib.dump(study_DeltaGrad.best_params, "best_params_DeltaGrad_fixed_b512_epochs50.pkl")
     
     print("\nTuning complete. Best hyperparameters saved.")
 
     # Save full Optuna study objects for audit and visualization 
-    study_path_adam = os.path.join(output_dir, "study_adam_b512_fixed_epochs15.pkl")
+    study_path_adam = os.path.join(output_dir, "study_adam_b512_fixed_epochs50.pkl")
     joblib.dump(study_Adam, study_path_adam)
 
-    study_path_dg = os.path.join(output_dir, "study_deltagrad_b512_fixed_epochs15.pkl")
+    study_path_dg = os.path.join(output_dir, "study_deltagrad_b512_fixed_epochs50.pkl")
     joblib.dump(study_DeltaGrad, study_path_dg)
 
     print(f"Study objects stored in: {output_dir}")
