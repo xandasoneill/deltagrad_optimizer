@@ -35,21 +35,21 @@ def train_model(model, optimizer, optimizer_name, epochs=50, batch=None):
     testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
 
     #Added noise to dataset
-    # noise_rate = 0.0
-    # num_samples = len(trainset.targets)
-    # num_noisy = int(noise_rate * num_samples)
+    noise_rate = 0.20
+    num_samples = len(trainset.targets)
+    num_noisy = int(noise_rate * num_samples)
 
     
-    # noisy_indices = torch.randperm(num_samples)[:num_noisy]
+    noisy_indices = torch.randperm(num_samples)[:num_noisy]
 
-    # for idx in noisy_indices:
-    #     current_label = trainset.targets[idx]
+    for idx in noisy_indices:
+        current_label = trainset.targets[idx]
         
-    #     new_label = torch.randint(0, 100, (1,)).item()
-    #     while new_label == current_label:
-    #         new_label = torch.randint(0, 100, (1,)).item()
+        new_label = torch.randint(0, 100, (1,)).item()
+        while new_label == current_label:
+            new_label = torch.randint(0, 100, (1,)).item()
         
-    #     trainset.targets[idx] = new_label
+        trainset.targets[idx] = new_label
 
     #batch_size = best_params["batch_size"]
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch, shuffle=True)
