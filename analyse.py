@@ -8,7 +8,7 @@ import joblib
 # print(results_dg["all_total_times"])
 # plot_mean_time_per_epoch(results_adam["all_timestamps"], results_dg["all_timestamps"])
 
-results =  joblib.load("results/results_datanoise/20%_15epochs/results_values/Adam_results_batch64_lr0.0003425316690148133.pkl")
+results =  joblib.load("results/results_datanoise/0%_50epochs/bs_512/results_values/Adam_results_batch512_lr0.00031705531640654854.pkl")
 print(results["optimizer_hyperparameters"])
 
 params = joblib.load("best_params_Adam_fixed_b512_epochs50.pkl")
