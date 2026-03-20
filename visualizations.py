@@ -65,8 +65,8 @@ def load_and_plot_results(results_deltagrad, results_adam):
 
         
 
-    plot_accuracy_evolution(results_deltagrad, results_adam)
-    plot_variance_comparison(results_deltagrad, results_adam)
+    # plot_accuracy_evolution(results_deltagrad, results_adam)
+    # plot_variance_comparison(results_deltagrad, results_adam)
     plot_combined_loss(results_adam, results_deltagrad, adam_label="Adam", dg_label="DeltaGrad")
 
 
@@ -448,10 +448,9 @@ def plot_combined_loss(adam_results, dg_results, adam_label="Adam", dg_label="De
                          color=color, alpha=0.2, label=f'{label} $\pm$ Std Dev')
 
     # 4. Scientific Formatting
-    plt.xlabel('Epoch', fontsize=22, fontweight='bold')
-    plt.ylabel('Training Loss', fontsize=22, fontweight='bold')
-    plt.title('Loss Convergence Comparison: Adam vs. DeltaGrad', fontsize=24, pad=25)
-    
+    plt.xlabel('Epoch', fontsize=25, fontweight='bold')
+    plt.ylabel('Training Loss', fontsize=25, fontweight='bold')
+ 
     # Ensure epoch ticks are integers and visible
     plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
     
@@ -459,7 +458,7 @@ def plot_combined_loss(adam_results, dg_results, adam_label="Adam", dg_label="De
     plt.yticks(fontsize=25)
     
     # Legend
-    plt.legend(fontsize=20, loc='upper right', frameon=True, framealpha=0.9)
+    plt.legend(fontsize=25, loc='upper right', frameon=True, framealpha=0.9)
     plt.grid(True, linestyle='--', alpha=0.6)
     
     plt.tight_layout()
