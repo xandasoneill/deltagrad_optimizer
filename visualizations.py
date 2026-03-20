@@ -3,6 +3,7 @@ import torch
 import matplotlib.pyplot as plt
 import os
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 import numpy as np
 
@@ -65,8 +66,8 @@ def load_and_plot_results(results_deltagrad, results_adam):
 
         
 
-    # plot_accuracy_evolution(results_deltagrad, results_adam)
-    # plot_variance_comparison(results_deltagrad, results_adam)
+    plot_accuracy_evolution(results_deltagrad, results_adam)
+    plot_variance_comparison(results_deltagrad, results_adam)
     plot_combined_loss(results_adam, results_deltagrad, adam_label="Adam", dg_label="DeltaGrad")
 
 
@@ -339,73 +340,80 @@ def plot_variance_comparison(results_dg, results_adam):
 
 
 
-def plot_mean_time_per_epoch(adam_runs_stamps, dg_runs_stamps):
-    """
-    adam_runs_stamps: Lista de listas [[run1_stamps], [run2_stamps], ...]
-    """
+def plot_mean_time_per_epoch(adam_runs_stamps, dg_runs_stamps, bin_size=5):
+
     def get_all_durations(runs_stamps):
         all_runs_durations = []
         for stamps in runs_stamps:
-            # Calcula durações individuais: [s0, s1-s0, s2-s1, ...]
+            # Calcula durações individuais por época
             durations = [stamps[0]] + [stamps[i] - stamps[i-1] for i in range(1, len(stamps))]
             all_runs_durations.append(durations)
         return np.array(all_runs_durations)
 
-    # Converter para matrizes (Runs x Epochs)
+    # 1. Obter matrizes originais (Runs x Epochs)
     adam_matrix = get_all_durations(adam_runs_stamps)
     dg_matrix = get_all_durations(dg_runs_stamps)
-
-    # Calcular Média e Desvio Padrão por Época (eixo 0 = entre as runs)
-    adam_mean = np.mean(adam_matrix, axis=0)
-    adam_std = np.std(adam_matrix, axis=0)
     
-    dg_mean = np.mean(dg_matrix, axis=0)
-    dg_std = np.std(dg_matrix, axis=0)
+    # Calcular médias globais para o texto de overhead (baseado em todos os dados)
+    global_avg_adam = np.mean(adam_matrix)
+    global_avg_dg = np.mean(dg_matrix)
 
-    epochs = np.arange(1, len(adam_mean) + 1)
-    plt.figure(figsize=(10, 6))
+    # 2. Agrupar dados em janelas de 'bin_size'
+    num_epochs = adam_matrix.shape[1]
+    num_bins = num_epochs // bin_size
     
-    bar_width = 0.35
+    # Redimensionar e calcular a média por bloco de 5 épocas
+    adam_binned = adam_matrix[:, :num_bins*bin_size].reshape(adam_matrix.shape[0], num_bins, bin_size).mean(axis=2)
+    dg_binned = dg_matrix[:, :num_bins*bin_size].reshape(dg_matrix.shape[0], num_bins, bin_size).mean(axis=2)
+    
+    # Médias e desvios por bin
+    adam_mean = np.mean(adam_binned, axis=0)
+    adam_std = np.std(adam_binned, axis=0)
+    dg_mean = np.mean(dg_binned, axis=0)
+    dg_std = np.std(dg_binned, axis=0)
 
-    # Plot com yerr (barras de erro representam o desvio padrão entre as 5 runs)
-    plt.bar(epochs - bar_width/2, adam_mean, bar_width, yerr=adam_std, 
-            label='Adam (Mean)', color='orange', alpha=0.8, capsize=5)
+    # Definir os centros das barras (ex: épocas 5, 10, 15...)
+    bin_centers = np.arange(bin_size, (num_bins + 1) * bin_size, bin_size)
+
+    plt.figure(figsize=(12, 7)) 
+    sns.set_style("whitegrid")
     
-    plt.bar(epochs + bar_width/2, dg_mean, bar_width, yerr=dg_std, 
-            label='DeltaGrad (Mean)', color='teal', alpha=0.8, capsize=5)
+    bar_width = bin_size * 0.35 # Largura proporcional ao intervalo
+
+    # 3. Plot das barras agrupadas
+    plt.bar(bin_centers - bar_width/2, adam_mean, bar_width, yerr=adam_std,
+            label='Adam', color='#ff7f0e', alpha=0.8, capsize=5)
+    
+    plt.bar(bin_centers + bar_width/2, dg_mean, bar_width, yerr=dg_std,
+            label='DeltaGrad', color='#008080', alpha=0.8, capsize=5)
 
     # Linhas de média global
-    global_avg_adam = np.mean(adam_mean)
-    global_avg_dg = np.mean(dg_mean)
-    plt.axhline(y=global_avg_adam, color='darkorange', linestyle='--', alpha=0.5)
-    plt.axhline(y=global_avg_dg, color='darkslategrey', linestyle='--', alpha=0.5)
+    plt.axhline(y=global_avg_adam, color='#ff7f0e', linestyle='--', alpha=0.6, linewidth=2)
+    plt.axhline(y=global_avg_dg, color='#008080', linestyle='--', alpha=0.6, linewidth=2)
 
-    plt.xlabel('Epoch', fontsize=25)
-    plt.ylabel('Time per Epoch (seconds)', fontsize=25)
-    plt.xticks(epochs)
-    plt.xticks(fontsize=25) # Aumenta os números do eixo X
-    plt.yticks(fontsize=25)
+    plt.xlabel('Epoch Intervals', fontsize=22, fontweight='bold')
+    plt.ylabel('Avg Time per Epoch (s)', fontsize=22, fontweight='bold')
     
+    plt.xticks(bin_centers, [f"{i-bin_size+1}-{i}" for i in bin_centers], fontsize=22)
+    plt.yticks(fontsize=22)
    
-    stats_text = (f'Adam (Avg: {global_avg_adam:.1f}s)\n'
-                f'DeltaGrad (Avg: {global_avg_dg:.1f}s)')
+    stats_text = (f'Adam Global Avg: {global_avg_adam:.2f}s\n'
+                  f'DeltaGrad Global Avg: {global_avg_dg:.2f}s')
 
-    plt.gca().text(0.98, 0.05, stats_text, 
-                transform=plt.gca().transAxes, 
-                fontsize=20, 
-                horizontalalignment='right',
-                verticalalignment='bottom',
-                bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='gray'))
+    plt.gca().text(0.98, 0.35, stats_text, 
+                transform=plt.gca().transAxes, fontsize=25, 
+                horizontalalignment='right', bbox=dict(facecolor='white', alpha=0.9))
     
     overhead = (global_avg_dg / global_avg_adam - 1) * 100
-    plt.text(0.02, 0.05, f"Avg Overhead: {overhead:.1f}%", transform=plt.gca().transAxes, 
-             fontsize=20, fontweight='bold', bbox=dict(facecolor='white', alpha=0.8))
+    plt.text(0.02, 0.05, f"Avg Overhead: {overhead:.2f}%", 
+             transform=plt.gca().transAxes, fontsize=25, fontweight='bold',
+             bbox=dict(facecolor='white', alpha=0.9, edgecolor='#008080'))
 
-    plt.grid(axis='y', linestyle='--', alpha=0.3)
+    plt.grid(axis='y', linestyle='--', alpha=0.4)
+    plt.legend(fontsize=20, loc='lower right')
     plt.tight_layout()
-    plt.savefig('mean_time_per_epoch.png', dpi=300)
-    plt.savefig('mean_time_per_epoch.pdf')
-
+    
+    plt.savefig('time_per_epoch.pdf', bbox_inches='tight')
 
 def plot_combined_loss(adam_results, dg_results, adam_label="Adam", dg_label="DeltaGrad"):
     """
