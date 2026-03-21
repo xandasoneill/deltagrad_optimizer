@@ -29,7 +29,7 @@ def train_model(trial, model, optimizer, epochs=50):
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    # 1. Load and Split Data (Preventing Data Leakage)
+    # 1. Load and Split Data 
     # Using CIFAR-100 for training.
     full_trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
     
