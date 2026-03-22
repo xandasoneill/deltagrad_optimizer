@@ -1,5 +1,7 @@
 # DeltaGrad: Towards Robust Deep Learning via Adaptive Gradient
 
+[📄 Read the Paper (PDF)](paper/DeltaGrad_extended_abstract.pdf) | [📊 View Results](results/)
+
 ![DeltaGrad Gradient Variance](results/results_batchtest/256/results_visualizations/variance_comparison_stress_test.png)
 ---
 
