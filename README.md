@@ -1,19 +1,9 @@
 # DeltaGrad: Towards Robust Deep Learning via Adaptive Gradient
 
-This repository contains the official implementation of **DeltaGrad**, an adaptive optimizer designed to mitigate noise memorization and gradient instability in non-convex optimization. [cite_start]By introducing a dynamic **Reliability Metric ($R_t$)** [cite_start], the framework modulates updates based on instantaneous gradient coherence.
-
+![DeltaGrad Gradient Variance](results/results_batchtest/256/results_visualizations/variance_comparison_stress_test.png)
 ---
 
-## 📈 Experimental Results Summary
-
-[cite_start]Compared to the Adam baseline on CIFAR-100, DeltaGrad demonstrates superior stability and noise resilience:
-
-| Metric | Adam | DeltaGrad | Performance Gain |
-| :--- | :--- | :--- | :--- |
-| **Learning Rate Stability** | Baseline | **10x Standard** | [cite_start]Enhanced Robustness |
-| **Global Mean Variance** | $6.78 \times 10^{-4}$ | **$5.90 \times 10^{-5}$** | [cite_start]10x Lower Instability |
-| **Comp. Overhead** | 0.00% | **0.38%** | [cite_start]Negligible |
-| **Training Time/Epoch** | 36.96s | **37.10s** | [cite_start]Scalable |
+This repository contains the official implementation of **DeltaGrad**, an adaptive optimizer designed to mitigate noise memorization and gradient instability in non-convex optimization. By introducing a dynamic **Reliability Metric ($R_t$)**, the framework modulates updates based on instantaneous gradient coherence.
 
 ---
 
@@ -21,9 +11,9 @@ This repository contains the official implementation of **DeltaGrad**, an adapti
 
 The repository is modularly structured to ensure experimental transparency and extensibility:
 
-* [cite_start]**`DeltaGrad.py`**: Implementation of the $R_t$ metric and Windowed Inertia logic.
+* **`DeltaGrad.py`**: Implementation of the $R_t$ metric and Windowed Inertia logic.
 * **`engine.py`**: Standardized training and evaluation logic across all test regimes.
-* [cite_start]**`model.py`**: Compact ConvNet architecture used for all benchmarks.
+* **`model.py`**: Compact ConvNet architecture used for all benchmarks.
 * **`tune_hyperparams.py`**: Automated Hyperparameter Optimization suite using **Optuna**.
 * **`final_benchmark.py`**: Primary script to execute Learning Rate Stress, Batch Size, and Data Noise tests.
 * **📂 `best_params/`**: Serialized optimal hyperparameters from the Optuna studies.
