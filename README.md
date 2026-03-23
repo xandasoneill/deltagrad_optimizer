@@ -49,6 +49,6 @@ If you utilize this implementation or the DeltaGrad framework in your research, 
   author={O'Neill Mendes, Alexandre},
   journal={GitHub Repository},
   year={2026},
-  note={Preprint in submission},
-  howpublished = {\url{https://github.com/xandasoneill/deltagrad_optimizer}}
+  note={Working paper},
+  url = {https://github.com/xandasoneill/deltagrad_optimizer}
 }
