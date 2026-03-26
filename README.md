@@ -51,6 +51,7 @@ To install all required dependencies at once, run the following command in your 
 
 ```bash
 pip install torch torchvision numpy optuna joblib scipy matplotlib seaborn
+```
 ---
 
 ## 📚 Citation
@@ -66,3 +67,4 @@ If you utilize this implementation or the DeltaGrad framework in your research, 
   note={Preprint},
   url = {https://github.com/xandasoneill/deltagrad_optimizer}
 }
+```
