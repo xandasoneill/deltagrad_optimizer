@@ -12,14 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import joblib
-from DeltaGrad import DeltaGrad
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-from model import ConvNet
 from visualizations import get_grad_variance
 import time
 #import torch_directml
