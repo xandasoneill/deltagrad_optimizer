@@ -18,6 +18,7 @@ from matplotlib.ticker import MaxNLocator
 import numpy as np
 import seaborn as sns
 from scipy.stats import pearsonr
+import matplotlib.ticker as ticker
 
 # ==============================================================================
 # 1. GRADIENT CALCULATION UTILITIES
@@ -89,7 +90,8 @@ def plot_all_runs_combined(r_history_list, v_history_list):
     """
     Scatter plot showing the negative correlation between Reliability (R) and Gradient Variance.
     """
-    plt.figure(figsize=(10, 6))
+
+    plt.figure(figsize=(1.71, 1.5))
     
     # Professional color palette
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
@@ -107,35 +109,41 @@ def plot_all_runs_combined(r_history_list, v_history_list):
         all_pearsons.append(corr)
         
         current_color = colors[i % len(colors)]
-        plt.scatter(r_vals, v_vals, alpha=0.12, color=current_color, edgecolors='none', 
+        plt.scatter(r_vals, v_vals, alpha=0.3, color=current_color, edgecolors='none', s=1,
                     label=f'Run {i+1} (r={corr:.2f})')
         
         # Local Lowess trend line
         sns.regplot(x=np.array(r_vals), y=np.array(v_vals), scatter=False, lowess=True, 
-                    line_kws={'color': current_color, 'linewidth': 1.2, 'alpha': 0.7})
+                    line_kws={'color': current_color, 'linewidth': 0.6, 'alpha': 0.7})
 
     # Global Trend Line
     sns.regplot(x=np.array(r_flat), y=np.array(v_flat), scatter=False, lowess=True, 
-                line_kws={'color': 'black', 'linewidth': 3, 'ls': '--', 'label': 'Global Trend'})
+                line_kws={'color': 'black', 'linewidth': 1, 'ls': '--', 'label': 'Global Trend'})
 
     # P-value scientific notation formatting
     p_text = f"{global_p:.2e}" if global_p < 0.001 else f"{global_p:.4f}"
 
-    plt.xlabel("Reliability Metric R (Network Average)", fontsize=25)
-    plt.ylabel("Real Gradient Variance (p)", fontsize=25)
-    plt.legend(loc='upper right', 
-           fontsize=25, 
-           ncol=2 if len(r_history_list) <= 5 else 3,
-           columnspacing=0.5,  
-           handletextpad=0.2,   
-           borderaxespad=0.2)   
-    plt.grid(True, linestyle='--', alpha=0.3)
-    plt.xticks(fontsize=25)
-    plt.yticks(fontsize=25)
-
-    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=4))
+   
+    plt.xlabel("Reliability (R)", fontsize=10)
+    plt.ylabel("Grad. Var. (p)", fontsize=10)
     
-    plt.tight_layout()
+    plt.grid(True, linestyle='--', alpha=0.3)
+    
+    # 2. Fonte dos ticks a 10pt
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+
+    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=2))
+    plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=3))
+    
+
+    plt.gca().ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+    plt.gca().yaxis.get_offset_text().set_fontsize(10)
+    
+    # 5. Otimização final do espaço com padding mínimo
+    plt.tight_layout(pad=0.3)
+    
     # Save in high-quality PDF for the paper and PNG for quick view
     plt.savefig("deltagrad_combined_correlation.pdf", bbox_inches='tight')
     plt.savefig("deltagrad_combined_correlation.png", dpi=300, bbox_inches='tight')
@@ -173,7 +181,8 @@ def plot_accuracy_evolution(results_dg, results_adam):
     """
     Compares Validation Accuracy evolution across epochs.
     """
-    plt.figure(figsize=(10, 6))
+
+    plt.figure(figsize=(1.71, 1.5))
     
     def get_stats(history):
         matrix = np.array(history)
@@ -185,27 +194,35 @@ def plot_accuracy_evolution(results_dg, results_adam):
     adam_mean, adam_std = get_stats(results_adam["acc_history"])
     epochs = np.arange(1, len(dg_mean) + 1)
 
-    # Plot DeltaGrad with shaded uncertainty
-    plt.plot(epochs, dg_mean, label='DeltaGrad (Mean)', color='teal', linewidth=2)
+    plt.plot(epochs, dg_mean, label='DG (Mean)', color='teal', linewidth=1.2)
     plt.fill_between(epochs, dg_mean - dg_std, dg_mean + dg_std, color='teal', alpha=0.2)
 
-    # Plot Adam with shaded uncertainty
-    plt.plot(epochs, adam_mean, label='Adam (Mean)', color='orange', linewidth=2)
+    plt.plot(epochs, adam_mean, label='Adam (Mean)', color='orange', linewidth=1.2)
     plt.fill_between(epochs, adam_mean - adam_std, adam_mean + adam_std, color='orange', alpha=0.2)
 
-    # Display Average Standard Deviation as text
     avg_std_dg = np.mean(dg_std)
     avg_std_adam = np.mean(adam_std)
-    stats_text = (f'Avg Std Dev:\nDG: {avg_std_dg:.2f}%\nAdam: {avg_std_adam:.2f}%')
-    plt.gca().text(0.02, 0.05, stats_text, transform=plt.gca().transAxes, fontsize=25,
-                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+    # stats_text = (f'Avg Std Dev:\nDG: {avg_std_dg:.2f}%\nAdam: {avg_std_adam:.2f}%')
+    # plt.gca().text(0.16, 0.07, stats_text, transform=plt.gca().transAxes, fontsize=10,
+    #                bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, pad=0.3))
+    print("accuracy std deviation")
+    print(avg_std_dg, avg_std_adam)
 
-    plt.xlabel("Epoch", fontsize=25)
-    plt.ylabel("Validation Accuracy (%)", fontsize=25)
-    plt.legend(loc='lower right', fontsize = 23)
+    plt.xlabel("Epoch", fontsize=10)
+    plt.ylabel("Val. Acc. (%)", fontsize=10)
+    
     plt.grid(True, linestyle='--', alpha=0.5)
-    plt.xticks(fontsize=25)
-    plt.yticks(fontsize=25)
+    
+
+    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=4))
+    plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=4))
+    
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    
+
+    
+    plt.tight_layout(pad=0.3)
     
     plt.savefig("accuracy_stability_comparison.pdf", bbox_inches='tight')
     plt.savefig("accuracy_stability_comparison.png", dpi=300, bbox_inches='tight')
@@ -214,39 +231,51 @@ def plot_variance_comparison(results_dg, results_adam):
     """
     Log-scale comparison of gradient variance between optimizers.
     """
-    plt.figure(figsize=(10, 6))
+  
+    plt.figure(figsize=(3.43, 2.2))
     dg_color, adam_color = 'teal', 'orange'
     
     def process_and_plot(history_list, label, color):
         matrix = np.array(history_list)
         matrix = np.where(matrix < 1e-10, 1e-10, matrix) # Clip extreme small values
         
-        # Plot individual faint runs
+
         for i in range(matrix.shape[0]):
-            plt.plot(matrix[i], color=color, alpha=0.15, linewidth=1)
+            plt.plot(matrix[i], color=color, alpha=0.15, linewidth=0.5)
         
         mean_vals = np.mean(matrix, axis=0)
-        plt.plot(mean_vals, color=color, linewidth=2.5, label=f'{label} (Mean)')
+   
+        plt.plot(mean_vals, color=color, linewidth=1.5, label=f'{label} (Mean)')
         return np.mean(matrix)
 
     avg_var_dg = process_and_plot(results_dg["variance_history"], "DeltaGrad", dg_color)
     avg_var_adam = process_and_plot(results_adam["variance_history"], "Adam", adam_color)
+    print()
+    print(avg_var_dg, avg_var_adam)
 
     plt.yscale('log') 
-    plt.xlabel("Batches", fontsize=25)
-    plt.ylabel("Real Gradient Variance", fontsize=22)
-    plt.xticks(fontsize=25)
-    plt.yticks(fontsize=25)
     
+    plt.xlabel("Batches", fontsize=10)
+    plt.ylabel("Real Gradient Variance", fontsize=10)
+    
+  
+    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=5))
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    
+   
     stats_text = (f'Global Mean Variance:\n'
-                    f'DeltaGrad: {avg_var_dg:.2e}\n'
-                    f'Adam: {avg_var_adam:.2e}')
-    plt.gca().text(0.02, 0.05, stats_text, transform=plt.gca().transAxes, 
-                    fontsize=20,
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                  f'DeltaGrad: {avg_var_dg:.2e}\n'
+                  f'Adam: {avg_var_adam:.2e}')
+    plt.gca().text(0.40, 0.05, stats_text, transform=plt.gca().transAxes, 
+                   fontsize=10,
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, pad=0.3))
 
-    plt.legend(loc='lower right', fontsize=20)
+    # plt.legend(loc='lower right', fontsize=10, handlelength=1.5, handletextpad=0.4, borderpad=0.3)
     plt.grid(True, which="both", linestyle='--', alpha=0.4)
+    
+ 
+    plt.tight_layout(pad=0.3)
     
     plt.savefig("variance_comparison_stress_test.pdf", bbox_inches='tight')
     plt.savefig("variance_comparison_stress_test.png", dpi=300, bbox_inches='tight')
@@ -284,41 +313,52 @@ def plot_mean_time_per_epoch(adam_runs_stamps, dg_runs_stamps, bin_size=5):
 
     bin_centers = np.arange(bin_size, (num_bins + 1) * bin_size, bin_size)
 
-    plt.figure(figsize=(12, 7)) 
+    # 1. Target physical size for full-column width (3.43 inches)
+    plt.figure(figsize=(3.43, 2.2)) 
     sns.set_style("whitegrid")
     bar_width = bin_size * 0.35 
 
+    # 2. Reduce capsize and error bar thickness to fit the smaller scale
     plt.bar(bin_centers - bar_width/2, adam_mean, bar_width, yerr=adam_std,
-            label='Adam', color='#ff7f0e', alpha=0.8, capsize=5)
+            label='Adam', color='#ff7f0e', alpha=0.8, capsize=1.5, error_kw={'linewidth': 0.8})
     
     plt.bar(bin_centers + bar_width/2, dg_mean, bar_width, yerr=dg_std,
-            label='DeltaGrad', color='#008080', alpha=0.8, capsize=5)
+            label='DeltaGrad', color='#008080', alpha=0.8, capsize=1.5, error_kw={'linewidth': 0.8})
 
-    # Reference lines for global averages
-    plt.axhline(y=global_avg_adam, color='#ff7f0e', linestyle='--', alpha=0.6, linewidth=2)
-    plt.axhline(y=global_avg_dg, color='#008080', linestyle='--', alpha=0.6, linewidth=2)
+    # 3. Reduce reference line width
+    plt.axhline(y=global_avg_adam, color='#ff7f0e', linestyle='--', alpha=0.6, linewidth=1)
+    plt.axhline(y=global_avg_dg, color='#008080', linestyle='--', alpha=0.6, linewidth=1)
 
-    plt.xlabel('Epoch Intervals', fontsize=22, fontweight='bold')
-    plt.ylabel('Avg Time per Epoch (s)', fontsize=22, fontweight='bold')
+    # 4. Strict 10pt font size and abbreviated Y-axis
+    plt.xlabel('Epoch Intervals', fontsize=10)
+    plt.ylabel('Avg Time/Epoch (s)', fontsize=10)
     
-    plt.xticks(bin_centers, [f"{i-bin_size+1}-{i}" for i in bin_centers], fontsize=22)
-    plt.yticks(fontsize=22)
+    # 5. Rotate x-ticks by 45 degrees to prevent overlapping text
+    x_labels = [f"{i-bin_size+1}-{i}" for i in bin_centers]
+    plt.xticks(bin_centers, x_labels, fontsize=10, rotation=45)
+    plt.yticks(fontsize=10)
    
+    # 6. Compress text boxes and strictly apply 10pt font
     stats_text = (f'Adam Global Avg: {global_avg_adam:.2f}s\n'
                   f'DeltaGrad Global Avg: {global_avg_dg:.2f}s')
 
-    plt.gca().text(0.98, 0.35, stats_text, 
-                transform=plt.gca().transAxes, fontsize=25, 
-                horizontalalignment='right', bbox=dict(facecolor='white', alpha=0.9))
+    plt.gca().text(0.98, 0.45, stats_text, 
+                transform=plt.gca().transAxes, fontsize=10, 
+                horizontalalignment='right', 
+                bbox=dict(facecolor='white', alpha=0.9, pad=0.3))
     
     overhead = (global_avg_dg / global_avg_adam - 1) * 100
     plt.text(0.02, 0.05, f"Avg Overhead: {overhead:.2f}%", 
-             transform=plt.gca().transAxes, fontsize=25, fontweight='bold',
-             bbox=dict(facecolor='white', alpha=0.9, edgecolor='#008080'))
+             transform=plt.gca().transAxes, fontsize=10,
+             bbox=dict(facecolor='white', alpha=0.9, edgecolor='#008080', pad=0.3))
 
     plt.grid(axis='y', linestyle='--', alpha=0.4)
-    plt.legend(fontsize=20, loc='lower right')
-    plt.tight_layout()
+    
+    # 7. Adjust legend size and spacing
+    plt.legend(fontsize=10, loc='lower right', handlelength=1.0, handletextpad=0.3)
+    
+    # 8. Minimize outer padding
+    plt.tight_layout(pad=0.3)
     plt.savefig('time_per_epoch.pdf', bbox_inches='tight')
 
 def plot_combined_loss(adam_results, dg_results, adam_label="Adam", dg_label="DeltaGrad"):
@@ -333,7 +373,8 @@ def plot_combined_loss(adam_results, dg_results, adam_label="Adam", dg_label="De
     
     colors = {'Adam': '#ff7f0e', 'DeltaGrad': '#008080'}
     
-    plt.figure(figsize=(10, 6))
+    # 1. Target physical size for half-column width
+    plt.figure(figsize=(1.71, 1.5))
     sns.set_style("whitegrid")
 
     for data, label, color in [(adam_data, adam_label, colors['Adam']), 
@@ -342,21 +383,34 @@ def plot_combined_loss(adam_results, dg_results, adam_label="Adam", dg_label="De
         mean_loss = np.mean(data, axis=0)
         std_loss = np.std(data, axis=0)
         
+        # 2. Reduce line width for individual runs to avoid swallowing the plot
         for run in data:
-            plt.plot(epochs, run, alpha=0.08, color=color, linewidth=1)
+            plt.plot(epochs, run, alpha=0.08, color=color, linewidth=0.5)
             
-        plt.plot(epochs, mean_loss, color=color, linewidth=3.5, label=f'{label} (Mean)')
+        # 3. Reduce mean line width from 3.5 to 1.2
+        plt.plot(epochs, mean_loss, color=color, linewidth=1.2, label=f'{label} (Mean)')
         plt.fill_between(epochs, mean_loss - std_loss, mean_loss + std_loss, 
                          color=color, alpha=0.2, label=f'{label} $\pm$ Std Dev')
 
-    plt.xlabel('Epoch', fontsize=25, fontweight='bold')
-    plt.ylabel('Training Loss', fontsize=25, fontweight='bold')
-    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-    plt.xticks(fontsize=25)
-    plt.yticks(fontsize=25)
-    plt.legend(fontsize=25, loc='upper right', frameon=True, framealpha=0.9)
+    # 4. Strict 10pt font size and abbreviated Y-axis label
+    plt.xlabel('Epoch', fontsize=10)
+    plt.ylabel('Train. Loss', fontsize=10)
+    
+    # 5. Limit ticks to prevent number overlap
+    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True, nbins=4))
+    plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=4))
+    
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    
+    # 6. Compress legend spacing. 
+    # plt.legend(fontsize=10, loc='upper right', frameon=True, framealpha=0.9, 
+    #            handlelength=1.0, handletextpad=0.3, borderpad=0.3, labelspacing=0.2)
+    
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.tight_layout()
+    
+    # 7. Minimize outer padding
+    plt.tight_layout(pad=0.3)
     
     plt.savefig("loss_comparison_combined.png", dpi=300, bbox_inches='tight')
     plt.savefig("loss_comparison_combined.pdf", bbox_inches='tight')
