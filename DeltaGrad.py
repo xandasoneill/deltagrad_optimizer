@@ -31,7 +31,7 @@ class DeltaGrad(Optimizer):
         if not 0.0 <= beta < 1.0:
             raise ValueError(f"Invalid beta parameter: {beta}")
         
-        defaults = dict(lr=lr, gamma=gamma, alpha=alpha, 
+        defaults = dict(lr=lr, alpha=alpha, 
                         beta=beta, K=K, smoothing=smoothing, 
                         weight_decay=weight_decay, epsilon=epsilon)
         
