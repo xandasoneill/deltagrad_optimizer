@@ -97,7 +97,7 @@ class DeltaGrad(Optimizer):
                     
                     # Broadcast alpha weights across the history dimension
                     # We only use weights up to the current history length
-                    current_alpha = alpha_weights[:cur_k].view(-1, *([1] * smooth.dim()))
+                    current_alpha = alpha_weights[:cur_k].flip(0).view(-1, *([1] * grad.dim()))
                     terms = current_alpha * (diff / sum_val)
                     R_sum = terms.sum(dim=0)
                     
@@ -105,7 +105,7 @@ class DeltaGrad(Optimizer):
                     R = torch.clamp(R, min=0.1, max=1.0)
 
                     # 3. Vectorized Inertia Calculation
-                    current_beta = beta_weights[:cur_k].view(-1, *([1] * smooth.dim()))
+                    current_beta = beta_weights[:cur_k].flip(0).view(-1, *([1] * smooth.dim()))
                     grad_inertia_num = (current_beta * history_tensor).sum(dim=0)
                     grad_inertia_den = beta_weights[:cur_k].sum()
                     
