@@ -19,7 +19,6 @@ class DeltaGrad(Optimizer):
     def __init__(self, 
                 params, 
                 lr=0.01,
-                gamma=0.9, 
                 K=4, 
                 alpha=0.1,
                 beta=0.9, 
@@ -125,6 +124,6 @@ class DeltaGrad(Optimizer):
 
                 # Final Weight Update
                 # p = p - (learning_rate * adaptive_gamma * R * inertia)
-                p.addcmul_(grad_inertia, R, value=(-eta * gamma))
+                p.addcmul_(grad_inertia, R, value=(-eta))
 
         return loss
