@@ -60,5 +60,6 @@ model.train(
     data='coco.yaml', 
     optimizer=deltagrad_factory, 
     epochs=100,
-    imgsz=640
+    imgsz=640, 
+    batch=16
 )

@@ -19,6 +19,7 @@ import numpy as np
 import seaborn as sns
 from scipy.stats import pearsonr
 import matplotlib.ticker as ticker
+import glob
 
 # ==============================================================================
 # 1. GRADIENT CALCULATION UTILITIES
@@ -414,3 +415,77 @@ def plot_combined_loss(adam_results, dg_results, adam_label="Adam", dg_label="De
     
     plt.savefig("loss_comparison_combined.png", dpi=300, bbox_inches='tight')
     plt.savefig("loss_comparison_combined.pdf", bbox_inches='tight')
+
+# ==============================================================================
+# 5. DELTAGRAD ON YOLO
+# ==============================================================================
+
+def analyze_deltagrad_runs(log_dir="deltagrad_analysis"):
+    # Find all saved epoch files and sort them numerically
+    files = sorted(glob.glob(os.path.join(log_dir, "epoch_*.pt")), 
+                   key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0]))
+    
+    epochs = []
+    avg_R = []
+    weight_l2_norms = []
+    grad_norms = []
+
+    for file in files:
+        epoch_num = int(os.path.basename(file).split('_')[1].split('.')[0])
+        epochs.append(epoch_num)
+        
+        # Load the saved state for this epoch
+        data = torch.load(file)
+        
+        epoch_R = []
+        epoch_l2 = 0.0
+        epoch_grad_norm = 0.0
+        
+        for name, metrics in data.items():
+            # 1. Aggregate Reliability Metric (R)
+            if 'R' in metrics and metrics['R'] is not None:
+                epoch_R.append(metrics['R'].float().mean().item())
+            
+            # 2. Calculate Weight Decay Metric (L2 Norm: sum of squares)
+            weights = metrics['w'].float()
+            epoch_l2 += torch.norm(weights, p=2).item()
+            
+            # 3. Calculate Gradient Norm for stability analysis
+            if metrics['g'] is not None:
+                grads = metrics['g'].float()
+                epoch_grad_norm += torch.norm(grads, p=2).item()
+
+        avg_R.append(sum(epoch_R) / len(epoch_R) if epoch_R else 1.0)
+        weight_l2_norms.append(epoch_l2)
+        grad_norms.append(epoch_grad_norm)
+
+    # --- Plotting ---
+    fig, axs = plt.subplots(3, 1, figsize=(10, 15))
+
+    # Plot 1: Mean Reliability Metric (R_t)
+    # This shows how much the 'safety brake' was active
+    axs[0].plot(epochs, avg_R, color='blue', label='Mean $R_t$')
+    axs[0].set_title('Global Optimizer Reliability ($R_t$)')
+    axs[0].set_ylabel('Reliability Score (0.1 - 1.0)')
+    axs[0].grid(True)
+
+    # Plot 2: Total Weight L2 Norm (Weight Decay Metric)
+    # Shows the evolution of weight magnitude across training
+    axs[1].plot(epochs, weight_l2_norms, color='green', label='$L_2$ Norm')
+    axs[1].set_title('Total Model Weight $L_2$ Norm (Weight Decay Impact)')
+    axs[1].set_ylabel('$\sum ||\\theta||_2$')
+    axs[1].grid(True)
+
+    # Plot 3: Gradient Norms (Exploration vs Stability)
+    axs[2].plot(epochs, grad_norms, color='red', label='Grad Norm')
+    axs[2].set_title('Global Gradient Norm')
+    axs[2].set_xlabel('Epoch')
+    axs[2].set_ylabel('$||\nabla L||_2$')
+    axs[2].grid(True)
+
+    plt.tight_layout()
+    plt.savefig('deltagrad_custom_metrics.png')
+    plt.show()
+
+if __name__ == "__main__":
+    analyze_deltagrad_runs()
