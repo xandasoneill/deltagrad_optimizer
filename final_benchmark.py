@@ -22,8 +22,8 @@ import time
 import numpy as np
 
 # Load pre-tuned best parameters from Optuna trials
-best_params_deltagrad = joblib.load("best_params_DeltaGrad_fixed_b512_epochs50.pkl")
-best_params_adam = joblib.load("best_params_Adam_fixed_b512_epochs50.pkl")
+best_params_deltagrad = joblib.load("best_params/best_params_DeltaGrad_fixed_b512_epochs50.pkl")
+best_params_adam = joblib.load("best_params/best_params_Adam_fixed_b512_epochs50.pkl")
 
 def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
     """
@@ -144,8 +144,8 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
 
 if __name__ == "__main__":
     # Execute full benchmark suite
-    print("Starting benchmark for Adam...")
-    run_benchmark(n_runs=5, optimizer_name="Adam")
+    # print("Starting benchmark for Adam...")
+    # run_benchmark(n_runs=1, optimizer_name="Adam")
     
     print("Starting benchmark for DeltaGrad...")
-    run_benchmark(n_runs=5, optimizer_name="DeltaGrad")
+    run_benchmark(n_runs=1, optimizer_name="DeltaGrad")

@@ -47,7 +47,6 @@ class DeltaGrad(Optimizer):
         for group in self.param_groups:
             # Hyperparameters
             eta = group['lr']
-            gamma = group['gamma']
             alpha = group['alpha']
             beta = group['beta']
             K = group['K']
@@ -123,7 +122,7 @@ class DeltaGrad(Optimizer):
                     history.pop(0)
 
                 # Final Weight Update
-                # p = p - (learning_rate * adaptive_gamma * R * inertia)
+                # p = p - (learning_rate * R * inertia)
                 p.addcmul_(grad_inertia, R, value=(-eta))
 
         return loss
