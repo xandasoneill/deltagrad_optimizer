@@ -38,6 +38,7 @@ class DeltaGrad(Optimizer):
         super(DeltaGrad, self).__init__(params, defaults)
 
     @torch.no_grad()
+    @torch.compile  # JIT compile for C++/CUDA fusion
     def step(self, closure=None):
         loss = None
         if closure is not None:
@@ -45,7 +46,6 @@ class DeltaGrad(Optimizer):
                 loss = closure()
 
         for group in self.param_groups:
-            # Hyperparameters
             eta = group['lr']
             alpha = group['alpha']
             beta = group['beta']
@@ -54,10 +54,6 @@ class DeltaGrad(Optimizer):
             weight_decay = group['weight_decay']
             eps = group['epsilon']
 
-            # Pre-calculate exponential weights for vectorized history
-            alpha_weights = torch.tensor([alpha**i for i in range(K)], device=group['params'][0].device)
-            beta_weights = torch.tensor([beta**(i+1) for i in range(K)], device=group['params'][0].device)
-
             for p in group['params']:
                 if p.grad is None:
                     continue
@@ -65,64 +61,65 @@ class DeltaGrad(Optimizer):
                 grad = p.grad
                 state = self.state[p]
 
-                # Initialization
+                # Initialize state and pre-allocate circular buffer
                 if len(state) == 0:
                     state['step'] = 0
                     state['smooth_grad'] = grad.clone()
-                    state['grad_history'] = [] # Stores up to K past smoothed gradients
+                    state['history_buffer'] = torch.zeros((K,) + p.shape, dtype=p.dtype, device=p.device)
+                    state['history_count'] = 0
                     
                 state['step'] += 1
                 smooth = state['smooth_grad']
-                history = state['grad_history']
+                history_buffer = state['history_buffer']
 
-                # Apply Weight Decay (L2 Regularization)
+                # In-place weight decay
                 if weight_decay != 0:
-                    grad = grad.add(p, alpha=weight_decay)
+                    grad.add_(p, alpha=weight_decay)
 
-                # Update smoothed gradient (EMA)
+                # In-place EMA update
                 if state['step'] > 1:
                     smooth.mul_(smooth_factor).add_(grad, alpha=(1 - smooth_factor))
+                else:
+                    smooth.copy_(grad)
 
-                cur_k = len(history)
+                cur_k = state['history_count']
+                
                 if cur_k > 0:
-                    # Vectorized computation of R and Inertia
-                    # 1. Stack history into a single tensor [K, parameters_shape]
-                    history_tensor = torch.stack(history) 
+                    valid_history = history_buffer[:cur_k]
                     
-                    # 2. Vectorized R Calculation (Reliability)
-                    diff = (smooth - history_tensor).abs()
-                    sum_val = smooth.abs() + history_tensor.abs() + eps
+                    # Vectorized decay weights on GPU
+                    powers = torch.arange(cur_k - 1, -1, -1, device=p.device, dtype=p.dtype)
+                    alpha_w = (alpha ** powers).view(-1, *([1] * p.dim()))
+                    beta_w = (beta ** (powers + 1)).view(-1, *([1] * p.dim()))
+
+                    # Vectorized Reliability (R)
+                    diff = (smooth - valid_history).abs()
+                    sum_val = smooth.abs() + valid_history.abs() + eps
                     
-                    # Broadcast alpha weights across the history dimension
-                    # We only use weights up to the current history length
-                    current_alpha = alpha_weights[:cur_k].flip(0).view(-1, *([1] * grad.dim()))
-                    terms = current_alpha * (diff / sum_val)
+                    terms = alpha_w * (diff / sum_val)
                     R_sum = terms.sum(dim=0)
                     
                     R = (cur_k - R_sum) / cur_k
-                    R = torch.clamp(R, min=0.1, max=1.0)
+                    R.clamp_(min=0.1, max=1.0) # In-place clamp
 
-                    # 3. Vectorized Inertia Calculation
-                    current_beta = beta_weights[:cur_k].flip(0).view(-1, *([1] * smooth.dim()))
-                    grad_inertia_num = (current_beta * history_tensor).sum(dim=0)
-                    grad_inertia_den = beta_weights[:cur_k].sum()
-                    
-                    # Bias correction for early steps
+                    # Vectorized Inertia
+                    grad_inertia_num = (beta_w * valid_history).sum(dim=0)
+                    grad_inertia_den = beta_w.sum()
                     grad_inertia = grad_inertia_num / (grad_inertia_den + eps)
                 else:
                     R = torch.ones_like(smooth)
                     grad_inertia = smooth.clone()
 
-                # Store R for diagnostics
                 state['R'] = R
 
-                # Update history buffer (Circular)
-                history.append(smooth.clone())
-                if len(history) > K:
-                    history.pop(0)
+                # Update circular buffer in-place
+                idx = (state['step'] - 1) % K
+                history_buffer[idx].copy_(smooth) 
+                
+                if state['history_count'] < K:
+                    state['history_count'] += 1
 
-                # Final Weight Update
-                # p = p - (learning_rate * R * inertia)
+                # Final in-place weight update
                 p.addcmul_(grad_inertia, R, value=(-eta))
 
         return loss
