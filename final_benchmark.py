@@ -60,7 +60,8 @@ def run_benchmark(n_runs=5, optimizer_name="DeltaGrad"):
             best_params_to_pass = best_params_deltagrad.copy()
             
             # Learning rate scaling can be adjusted here if needed
-            best_params_to_pass["lr"] = best_params_to_pass["lr"] 
+            best_params_to_pass["lr"] = best_params_to_pass["lr"] * best_params_to_pass["gamma"]
+            best_params_to_pass.pop("gamma", None)
             
             # Clean dictionary for the class constructor
             if "batch_size" in best_params_to_pass:
