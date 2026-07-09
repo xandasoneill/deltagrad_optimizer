@@ -1,0 +1,491 @@
+# Copyright 2026 Alexandre de Abreu O'Neill Mendes
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import torch
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+import numpy as np
+import seaborn as sns
+from scipy.stats import pearsonr
+import matplotlib.ticker as ticker
+import glob
+
+# ==============================================================================
+# 1. GRADIENT CALCULATION UTILITIES
+# ==============================================================================
+
+def get_grad_variance(model, criterion, inputs, labels, num_samples=8):
+    """
+    Computes the variance of gradients across different sub-samples of a batch.
+    """
+    grads = []
+    model.train() 
+
+    # Freeze BatchNorm statistics updates to avoid leakage during sampling
+    for m in model.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.track_running_stats = False 
+
+    sample_size = max(1, inputs.size(0) // 4) 
+    for _ in range(num_samples):
+        indices = torch.randperm(inputs.size(0))[:sample_size]
+        model.zero_grad()
+        outputs = model(inputs[indices])
+        loss = criterion(outputs, labels[indices])
+        loss.backward()
+        # Flatten and concatenate all gradients
+        all_grads = torch.cat([p.grad.detach().view(-1) for p in model.parameters() if p.grad is not None])
+        grads.append(all_grads)
+    
+    # Restore BatchNorm tracking
+    for m in model.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.track_running_stats = True
+
+    # Calculate mean variance across all parameters
+    variance = torch.var(torch.stack(grads), dim=0).mean().item()
+    return variance
+
+# ==============================================================================
+# 2. CORE PLOTTING ORCHESTRATOR
+# ==============================================================================
+
+def load_and_plot_results(results_deltagrad, results_adam):
+    """
+    Main entry point to load result dictionaries and generate all figures for the paper.
+    """
+    v_history = results_deltagrad["variance_history"] # List of lists (5 runs x iterations)
+    r_history = results_deltagrad["r_history"]        # List of lists (5 runs x iterations)
+
+    if len(v_history) == len(r_history):
+        # 1. Generate individual plots for each run
+        for i in range(len(v_history)):
+            plot_individual_run(r_history[i], v_history[i], run_id=i+1)
+        
+        # 2. Generate the "Killer Plot" combining all runs
+        plot_all_runs_combined(r_history, v_history)
+    else:
+        print("Variance history is not the same size as R history!")
+
+    # Standard performance comparisons
+    plot_accuracy_evolution(results_deltagrad, results_adam)
+    plot_variance_comparison(results_deltagrad, results_adam)
+    plot_combined_loss(results_adam, results_deltagrad, adam_label="Adam", dg_label="DeltaGrad")
+
+# ==============================================================================
+# 3. RELIABILITY METRIC (R) ANALYSIS PLOTS
+# ==============================================================================
+
+def plot_all_runs_combined(r_history_list, v_history_list):
+    """
+    Scatter plot showing the negative correlation between Reliability (R) and Gradient Variance.
+    """
+
+    plt.figure(figsize=(1.71, 1.5))
+    
+    # Professional color palette
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+              '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    
+    r_flat = [item for sublist in r_history_list for item in sublist]
+    v_flat = [item for sublist in v_history_list for item in sublist]
+    
+    # Global Correlation and P-Value calculation
+    global_r, global_p = pearsonr(r_flat, v_flat)
+    
+    all_pearsons = []
+    for i, (r_vals, v_vals) in enumerate(zip(r_history_list, v_history_list)):
+        corr, _ = pearsonr(r_vals, v_vals)
+        all_pearsons.append(corr)
+        
+        current_color = colors[i % len(colors)]
+        plt.scatter(r_vals, v_vals, alpha=0.3, color=current_color, edgecolors='none', s=1,
+                    label=f'Run {i+1} (r={corr:.2f})')
+        
+        # Local Lowess trend line
+        sns.regplot(x=np.array(r_vals), y=np.array(v_vals), scatter=False, lowess=True, 
+                    line_kws={'color': current_color, 'linewidth': 0.6, 'alpha': 0.7})
+
+    # Global Trend Line
+    sns.regplot(x=np.array(r_flat), y=np.array(v_flat), scatter=False, lowess=True, 
+                line_kws={'color': 'black', 'linewidth': 1, 'ls': '--', 'label': 'Global Trend'})
+
+    # P-value scientific notation formatting
+    p_text = f"{global_p:.2e}" if global_p < 0.001 else f"{global_p:.4f}"
+
+   
+    plt.xlabel("Reliability (R)", fontsize=10)
+    plt.ylabel("Grad. Var. (p)", fontsize=10)
+    
+    plt.grid(True, linestyle='--', alpha=0.3)
+    
+    # 2. Fonte dos ticks a 10pt
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+
+    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=2))
+    plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=3))
+    
+
+    plt.gca().ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+    plt.gca().yaxis.get_offset_text().set_fontsize(10)
+    
+    # 5. Otimização final do espaço com padding mínimo
+    plt.tight_layout(pad=0.3)
+    
+    # Save in high-quality PDF for the paper and PNG for quick view
+    plt.savefig("deltagrad_combined_correlation.pdf", bbox_inches='tight')
+    plt.savefig("deltagrad_combined_correlation.png", dpi=300, bbox_inches='tight')
+
+    print(f"Graph generated: r={global_r:.3f}, p={p_text}")
+
+def plot_individual_run(r_values, variance_values, run_id):
+    """
+    Plots stats for a single specific training run.
+    """
+    plt.figure(figsize=(10, 6))
+    
+    pearson_val, p_val = pearsonr(r_values, variance_values)
+    p_text = f"{p_val:.2e}" if p_val < 0.001 else f"{p_val:.4f}"
+    
+    sns.regplot(x=r_values, y=variance_values, lowess=True, 
+                scatter_kws={'alpha': 0.4, 'color': 'teal', 'edgecolors': 'none'}, 
+                line_kws={'color': 'red', 'linewidth': 2})
+    
+    plt.xlabel("Reliability Metric R", fontsize=10)
+    plt.ylabel("Gradient Variance", fontsize=10)
+    plt.grid(True, linestyle='--', alpha=0.5)
+
+    plt.savefig(f"deltagrad_run_{run_id}_stats.pdf", bbox_inches='tight')
+    plt.savefig(f"deltagrad_run_{run_id}_stats.png", dpi=150, bbox_inches='tight')
+    
+    plt.close() # Memory management
+    print(f"Individual run {run_id} saved (p={p_text})")
+
+# ==============================================================================
+# 4. BENCHMARK COMPARISON PLOTS (ADAM VS DELTAGRAD)
+# ==============================================================================
+
+def plot_accuracy_evolution(results_dg, results_adam):
+    """
+    Compares Validation Accuracy evolution across epochs.
+    """
+
+    plt.figure(figsize=(1.71, 1.5))
+    
+    def get_stats(history):
+        matrix = np.array(history)
+        mean = np.mean(matrix, axis=0)
+        std = np.std(matrix, axis=0)
+        return mean, std
+
+    dg_mean, dg_std = get_stats(results_dg["acc_history"])
+    adam_mean, adam_std = get_stats(results_adam["acc_history"])
+    epochs = np.arange(1, len(dg_mean) + 1)
+
+    plt.plot(epochs, dg_mean, label='DG (Mean)', color='teal', linewidth=1.2)
+    plt.fill_between(epochs, dg_mean - dg_std, dg_mean + dg_std, color='teal', alpha=0.2)
+
+    plt.plot(epochs, adam_mean, label='Adam (Mean)', color='orange', linewidth=1.2)
+    plt.fill_between(epochs, adam_mean - adam_std, adam_mean + adam_std, color='orange', alpha=0.2)
+
+    avg_std_dg = np.mean(dg_std)
+    avg_std_adam = np.mean(adam_std)
+    # stats_text = (f'Avg Std Dev:\nDG: {avg_std_dg:.2f}%\nAdam: {avg_std_adam:.2f}%')
+    # plt.gca().text(0.16, 0.07, stats_text, transform=plt.gca().transAxes, fontsize=10,
+    #                bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, pad=0.3))
+    print("accuracy std deviation")
+    print(avg_std_dg, avg_std_adam)
+
+    plt.xlabel("Epoch", fontsize=10)
+    plt.ylabel("Val. Acc. (%)", fontsize=10)
+    
+    plt.grid(True, linestyle='--', alpha=0.5)
+    
+
+    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=4))
+    plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=4))
+    
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    
+
+    
+    plt.tight_layout(pad=0.3)
+    
+    plt.savefig("accuracy_stability_comparison.pdf", bbox_inches='tight')
+    plt.savefig("accuracy_stability_comparison.png", dpi=300, bbox_inches='tight')
+
+def plot_variance_comparison(results_dg, results_adam):
+    """
+    Log-scale comparison of gradient variance between optimizers.
+    """
+  
+    plt.figure(figsize=(3.43, 2.2))
+    dg_color, adam_color = 'teal', 'orange'
+    
+    def process_and_plot(history_list, label, color):
+        matrix = np.array(history_list)
+        matrix = np.where(matrix < 1e-10, 1e-10, matrix) # Clip extreme small values
+        
+
+        for i in range(matrix.shape[0]):
+            plt.plot(matrix[i], color=color, alpha=0.15, linewidth=0.5)
+        
+        mean_vals = np.mean(matrix, axis=0)
+   
+        plt.plot(mean_vals, color=color, linewidth=1.5, label=f'{label} (Mean)')
+        return np.mean(matrix)
+
+    avg_var_dg = process_and_plot(results_dg["variance_history"], "DeltaGrad", dg_color)
+    avg_var_adam = process_and_plot(results_adam["variance_history"], "Adam", adam_color)
+    print()
+    print(avg_var_dg, avg_var_adam)
+
+    plt.yscale('log') 
+    
+    plt.xlabel("Batches", fontsize=10)
+    plt.ylabel("Real Gradient Variance", fontsize=10)
+    
+  
+    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=5))
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    
+   
+    stats_text = (f'Global Mean Variance:\n'
+                  f'DeltaGrad: {avg_var_dg:.2e}\n'
+                  f'Adam: {avg_var_adam:.2e}')
+    plt.gca().text(0.40, 0.05, stats_text, transform=plt.gca().transAxes, 
+                   fontsize=10,
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, pad=0.3))
+
+    # plt.legend(loc='lower right', fontsize=10, handlelength=1.5, handletextpad=0.4, borderpad=0.3)
+    plt.grid(True, which="both", linestyle='--', alpha=0.4)
+    
+ 
+    plt.tight_layout(pad=0.3)
+    
+    plt.savefig("variance_comparison_stress_test.pdf", bbox_inches='tight')
+    plt.savefig("variance_comparison_stress_test.png", dpi=300, bbox_inches='tight')
+    print(f"Variance plot saved. DG Avg: {avg_var_dg:.2e}, Adam Avg: {avg_var_adam:.2e}")
+
+def plot_mean_time_per_epoch(adam_runs_stamps, dg_runs_stamps, bin_size=5):
+    """
+    Analyzes computational overhead by measuring time per epoch.
+    """
+    def get_all_durations(runs_stamps):
+        all_runs_durations = []
+        for stamps in runs_stamps:
+            # Calculate durations per epoch from timestamps
+            durations = [stamps[0]] + [stamps[i] - stamps[i-1] for i in range(1, len(stamps))]
+            all_runs_durations.append(durations)
+        return np.array(all_runs_durations)
+
+    adam_matrix = get_all_durations(adam_runs_stamps)
+    dg_matrix = get_all_durations(dg_runs_stamps)
+    
+    global_avg_adam = np.mean(adam_matrix)
+    global_avg_dg = np.mean(dg_matrix)
+
+    num_epochs = adam_matrix.shape[1]
+    num_bins = num_epochs // bin_size
+    
+    # Bin epochs to make the bar chart readable
+    adam_binned = adam_matrix[:, :num_bins*bin_size].reshape(adam_matrix.shape[0], num_bins, bin_size).mean(axis=2)
+    dg_binned = dg_matrix[:, :num_bins*bin_size].reshape(dg_matrix.shape[0], num_bins, bin_size).mean(axis=2)
+    
+    adam_mean = np.mean(adam_binned, axis=0)
+    adam_std = np.std(adam_binned, axis=0)
+    dg_mean = np.mean(dg_binned, axis=0)
+    dg_std = np.std(dg_binned, axis=0)
+
+    bin_centers = np.arange(bin_size, (num_bins + 1) * bin_size, bin_size)
+
+    # 1. Target physical size for full-column width (3.43 inches)
+    plt.figure(figsize=(3.43, 2.2)) 
+    sns.set_style("whitegrid")
+    bar_width = bin_size * 0.35 
+
+    # 2. Reduce capsize and error bar thickness to fit the smaller scale
+    plt.bar(bin_centers - bar_width/2, adam_mean, bar_width, yerr=adam_std,
+            label='Adam', color='#ff7f0e', alpha=0.8, capsize=1.5, error_kw={'linewidth': 0.8})
+    
+    plt.bar(bin_centers + bar_width/2, dg_mean, bar_width, yerr=dg_std,
+            label='DeltaGrad', color='#008080', alpha=0.8, capsize=1.5, error_kw={'linewidth': 0.8})
+
+    # 3. Reduce reference line width
+    plt.axhline(y=global_avg_adam, color='#ff7f0e', linestyle='--', alpha=0.6, linewidth=1)
+    plt.axhline(y=global_avg_dg, color='#008080', linestyle='--', alpha=0.6, linewidth=1)
+
+    # 4. Strict 10pt font size and abbreviated Y-axis
+    plt.xlabel('Epoch Intervals', fontsize=10)
+    plt.ylabel('Avg Time/Epoch (s)', fontsize=10)
+    
+    # 5. Rotate x-ticks by 45 degrees to prevent overlapping text
+    x_labels = [f"{i-bin_size+1}-{i}" for i in bin_centers]
+    plt.xticks(bin_centers, x_labels, fontsize=10, rotation=45)
+    plt.yticks(fontsize=10)
+   
+    # 6. Compress text boxes and strictly apply 10pt font
+    stats_text = (f'Adam Global Avg: {global_avg_adam:.2f}s\n'
+                  f'DeltaGrad Global Avg: {global_avg_dg:.2f}s')
+
+    plt.gca().text(0.98, 0.45, stats_text, 
+                transform=plt.gca().transAxes, fontsize=10, 
+                horizontalalignment='right', 
+                bbox=dict(facecolor='white', alpha=0.9, pad=0.3))
+    
+    overhead = (global_avg_dg / global_avg_adam - 1) * 100
+    plt.text(0.02, 0.05, f"Avg Overhead: {overhead:.2f}%", 
+             transform=plt.gca().transAxes, fontsize=10,
+             bbox=dict(facecolor='white', alpha=0.9, edgecolor='#008080', pad=0.3))
+
+    plt.grid(axis='y', linestyle='--', alpha=0.4)
+    
+    # 7. Adjust legend size and spacing
+    plt.legend(fontsize=10, loc='lower right', handlelength=1.0, handletextpad=0.3)
+    
+    # 8. Minimize outer padding
+    plt.tight_layout(pad=0.3)
+    plt.savefig('time_per_epoch.pdf', bbox_inches='tight')
+
+def plot_combined_loss(adam_results, dg_results, adam_label="Adam", dg_label="DeltaGrad"):
+    """
+    Plots training loss for both Adam and DeltaGrad to visualize convergence speed.
+    """
+    adam_data = np.array(adam_results["loss_history"])
+    dg_data = np.array(dg_results["loss_history"])
+    
+    num_epochs = adam_data.shape[1]
+    epochs = np.arange(1, num_epochs + 1)
+    
+    colors = {'Adam': '#ff7f0e', 'DeltaGrad': '#008080'}
+    
+    # 1. Target physical size for half-column width
+    plt.figure(figsize=(1.71, 1.5))
+    sns.set_style("whitegrid")
+
+    for data, label, color in [(adam_data, adam_label, colors['Adam']), 
+                               (dg_data, dg_label, colors['DeltaGrad'])]:
+        
+        mean_loss = np.mean(data, axis=0)
+        std_loss = np.std(data, axis=0)
+        
+        # 2. Reduce line width for individual runs to avoid swallowing the plot
+        for run in data:
+            plt.plot(epochs, run, alpha=0.08, color=color, linewidth=0.5)
+            
+        # 3. Reduce mean line width from 3.5 to 1.2
+        plt.plot(epochs, mean_loss, color=color, linewidth=1.2, label=f'{label} (Mean)')
+        plt.fill_between(epochs, mean_loss - std_loss, mean_loss + std_loss, 
+                         color=color, alpha=0.2, label=f'{label} $\pm$ Std Dev')
+
+    # 4. Strict 10pt font size and abbreviated Y-axis label
+    plt.xlabel('Epoch', fontsize=10)
+    plt.ylabel('Train. Loss', fontsize=10)
+    
+    # 5. Limit ticks to prevent number overlap
+    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True, nbins=4))
+    plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=4))
+    
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    
+    # 6. Compress legend spacing. 
+    # plt.legend(fontsize=10, loc='upper right', frameon=True, framealpha=0.9, 
+    #            handlelength=1.0, handletextpad=0.3, borderpad=0.3, labelspacing=0.2)
+    
+    plt.grid(True, linestyle='--', alpha=0.6)
+    
+    # 7. Minimize outer padding
+    plt.tight_layout(pad=0.3)
+    
+    plt.savefig("loss_comparison_combined.png", dpi=300, bbox_inches='tight')
+    plt.savefig("loss_comparison_combined.pdf", bbox_inches='tight')
+
+# ==============================================================================
+# 5. DELTAGRAD ON YOLO
+# ==============================================================================
+
+def analyze_deltagrad_runs(log_dir="deltagrad_analysis"):
+    # Find all saved epoch files and sort them numerically
+    files = sorted(glob.glob(os.path.join(log_dir, "epoch_*.pt")), 
+                   key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0]))
+    
+    epochs = []
+    avg_R = []
+    weight_l2_norms = []
+    grad_norms = []
+
+    for file in files:
+        epoch_num = int(os.path.basename(file).split('_')[1].split('.')[0])
+        epochs.append(epoch_num)
+        
+        # Load the saved state for this epoch
+        data = torch.load(file)
+        
+        epoch_R = []
+        epoch_l2 = 0.0
+        epoch_grad_norm = 0.0
+        
+        for name, metrics in data.items():
+            # 1. Aggregate Reliability Metric (R)
+            if 'R' in metrics and metrics['R'] is not None:
+                epoch_R.append(metrics['R'].float().mean().item())
+            
+            # 2. Calculate Weight Decay Metric (L2 Norm: sum of squares)
+            weights = metrics['w'].float()
+            epoch_l2 += torch.norm(weights, p=2).item()
+            
+            # 3. Calculate Gradient Norm for stability analysis
+            if metrics['g'] is not None:
+                grads = metrics['g'].float()
+                epoch_grad_norm += torch.norm(grads, p=2).item()
+
+        avg_R.append(sum(epoch_R) / len(epoch_R) if epoch_R else 1.0)
+        weight_l2_norms.append(epoch_l2)
+        grad_norms.append(epoch_grad_norm)
+
+    # --- Plotting ---
+    fig, axs = plt.subplots(3, 1, figsize=(10, 15))
+
+    # Plot 1: Mean Reliability Metric (R_t)
+    # This shows how much the 'safety brake' was active
+    axs[0].plot(epochs, avg_R, color='blue', label='Mean $R_t$')
+    axs[0].set_title('Global Optimizer Reliability ($R_t$)')
+    axs[0].set_ylabel('Reliability Score (0.1 - 1.0)')
+    axs[0].grid(True)
+
+    # Plot 2: Total Weight L2 Norm (Weight Decay Metric)
+    # Shows the evolution of weight magnitude across training
+    axs[1].plot(epochs, weight_l2_norms, color='green', label='$L_2$ Norm')
+    axs[1].set_title('Total Model Weight $L_2$ Norm (Weight Decay Impact)')
+    axs[1].set_ylabel('$\sum ||\\theta||_2$')
+    axs[1].grid(True)
+
+    # Plot 3: Gradient Norms (Exploration vs Stability)
+    axs[2].plot(epochs, grad_norms, color='red', label='Grad Norm')
+    axs[2].set_title('Global Gradient Norm')
+    axs[2].set_xlabel('Epoch')
+    axs[2].set_ylabel('$||\nabla L||_2$')
+    axs[2].grid(True)
+
+    plt.tight_layout()
+    plt.savefig('deltagrad_custom_metrics.png')
+    plt.show()
+
+if __name__ == "__main__":
+    analyze_deltagrad_runs()
