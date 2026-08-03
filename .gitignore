@@ -3,3 +3,8 @@ testing.py
 trash/
 data/
 other_paper_versions/
+results/_smoke_runs/
+.pytest_cache/
+*.egg-info/
+build/
+dist/

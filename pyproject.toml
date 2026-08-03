@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deltagrad"
+version = "0.1.0"
+description = "DeltaGrad: gradient-coherence-based adaptive optimizers (windowed + EMA) and their paper benchmark suite."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Alexandre de Abreu O'Neill Mendes" }]
+dependencies = [
+    "torch>=1.10.0",
+    "torchvision>=0.11.0",
+    "numpy>=1.21.0",
+    "joblib",
+    "optuna>=2.10.0",
+    "scipy",
+    "matplotlib",
+    "seaborn",
+]
+
+[project.optional-dependencies]
+yolo = ["ultralytics"]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = [
+    "deltagrad",
+    "deltagrad.optimizers",
+    "deltagrad.data",
+    "deltagrad.yolo",
+    "experiments",
+    "experiments.extended",
+]
+
+[tool.pytest.ini_options]
+# no:anyio works around a pytest/anyio plugin version mismatch in some
+# environments (anyio's pytest11 entrypoint expects a newer pytest than may be
+# installed) -- harmless to disable since this suite has no async/anyio tests.
+addopts = "-p no:anyio -m \"not network\""
+markers = [
+    "network: tests that make real network calls (deselected by default; run with -m network)",
+]

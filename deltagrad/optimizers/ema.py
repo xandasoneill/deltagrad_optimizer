@@ -1,0 +1,180 @@
+import torch
+from torch.optim import Optimizer
+
+
+def _transform_linear(S_hat, **kw):
+    return 1 - S_hat
+
+
+def _transform_exp(S_hat, gamma, **kw):
+    return torch.exp(-gamma * S_hat)
+
+
+def _transform_inverse(S_hat, gamma, **kw):
+    return 1 / (1 + gamma * S_hat)
+
+
+def _transform_power(S_hat, power_p, **kw):
+    return 1 - S_hat.clamp(min=0).pow(power_p)  # clamp guards fractional-pow NaN
+
+
+def _transform_sigmoid(S_hat, tau, s, **kw):
+    return torch.sigmoid((tau - S_hat) / s)
+
+
+def _transform_zscore(S_hat, mu_S_hat, sigma_S_hat, zscore_k, epsilon, **kw):
+    return 1 - S_hat / (mu_S_hat + zscore_k * sigma_S_hat + epsilon)
+
+
+R_TRANSFORMS = {
+    # name -> (paper "Option" number from Sec. 3.2, transform fn)
+    "linear":  (0, _transform_linear),
+    "exp":     (1, _transform_exp),      # recommended default
+    "inverse": (2, _transform_inverse),
+    "power":   (3, _transform_power),
+    "sigmoid": (4, _transform_sigmoid),
+    "zscore":  (5, _transform_zscore),
+}
+
+
+class DeltaGradEMA(Optimizer):
+    """Infinite horizon DeltaGrad (EMA), per deltagradpaperplan.pdf Sec. 3 & 3.2.
+
+        g_tilde^(t) = sigma * g_tilde^(t-1) + (1-sigma) * g^(t)       # coherence tracking
+        phi_t       = |g_tilde^(t) - g_tilde^(t-1)| / (|g_tilde^(t)| + |g_tilde^(t-1)| + eps)
+        S_t         = beta_phi * S_(t-1) + (1-beta_phi) * phi_t
+        S_hat_t     = S_t / (1 - beta_phi**t)                         # bias corrected
+        m_t         = beta_m * m_(t-1) + (1-beta_m) * g^(t)           # momentum (raw grad EMA)
+        R_t         = clamp(R_TRANSFORMS[r_transform](S_hat_t), A, B)
+        theta_t+1   = theta_t - lr * (R_t * m_t)
+
+    g_tilde isn't restated in Sec. 3, but is read here as the same smoothed-gradient
+    EMA the paper defines in Sec. 2 -- a third per-parameter tensor, independent of
+    `m` (which instead tracks the *raw* gradient via its own decay `beta_m`). `m_0`
+    is warm-started at g^(1) since the paper specifies no bias correction for m_t
+    and zero-init without correction would bias early steps toward 0.
+
+    `r_transform` selects one of the 6 Sec. 3.2 candidate R_t transforms (see
+    R_TRANSFORMS): "linear", "exp" (default, paper's recommendation), "inverse",
+    "power", "sigmoid", "zscore". Only "zscore" needs extra mu_S/var_S state (5d
+    total instead of 3d) -- see experiments/ablation_state_memory.py.
+    """
+
+    def __init__(self,
+                 params,
+                 lr=0.001,
+                 sigma=0.9,
+                 beta_phi=0.9,
+                 beta_m=0.9,
+                 r_transform="exp",
+                 gamma=1.0,
+                 power_p=0.5,
+                 tau=0.0,
+                 s=1.0,
+                 zscore_k=2.0,
+                 A=0.1,
+                 B=1.0,
+                 weight_decay=0,
+                 epsilon=1e-8):
+
+        if lr < 0.0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        if not 0.0 <= sigma < 1.0:
+            raise ValueError(f"Invalid sigma parameter: {sigma}")
+        if not 0.0 <= beta_phi < 1.0:
+            raise ValueError(f"Invalid beta_phi parameter: {beta_phi}")
+        if not 0.0 <= beta_m < 1.0:
+            raise ValueError(f"Invalid beta_m parameter: {beta_m}")
+        if r_transform not in R_TRANSFORMS:
+            raise ValueError(f"Unknown r_transform '{r_transform}'. Choices: {list(R_TRANSFORMS)}")
+        if A > B:
+            raise ValueError(f"Invalid clamp bounds: A={A} > B={B}")
+
+        defaults = dict(lr=lr, sigma=sigma, beta_phi=beta_phi, beta_m=beta_m,
+                         r_transform=r_transform, gamma=gamma, power_p=power_p,
+                         tau=tau, s=s, zscore_k=zscore_k, A=A, B=B,
+                         weight_decay=weight_decay, epsilon=epsilon)
+        super().__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
+        for group in self.param_groups:
+            lr, sigma = group['lr'], group['sigma']
+            beta_phi, beta_m = group['beta_phi'], group['beta_m']
+            transform_name = group['r_transform']
+            A, B, eps, weight_decay = group['A'], group['B'], group['epsilon'], group['weight_decay']
+            _, transform_fn = R_TRANSFORMS[transform_name]
+
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+
+                grad = p.grad
+                state = self.state[p]
+
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['g_tilde'] = grad.clone()
+                    state['S'] = torch.zeros_like(p)
+                    state['m'] = grad.clone()
+                    if transform_name == "zscore":
+                        state['mu_S'] = torch.zeros_like(p)
+                        state['var_S'] = torch.zeros_like(p)
+                state['step'] += 1
+                t = state['step']
+
+                if weight_decay != 0:
+                    grad = grad.add(p, alpha=weight_decay)
+
+                g_tilde = state['g_tilde']
+                g_tilde_prev = g_tilde.clone()
+                if t > 1:
+                    g_tilde.mul_(sigma).add_(grad, alpha=(1 - sigma))
+                else:
+                    g_tilde.copy_(grad)  # t==1 -> g_tilde_prev == g_tilde -> phi_1 == 0
+
+                phi = (g_tilde - g_tilde_prev).abs() / (g_tilde.abs() + g_tilde_prev.abs() + eps)
+
+                S = state['S']
+                S.mul_(beta_phi).add_(phi, alpha=(1 - beta_phi))
+                bias_correction = 1 - beta_phi ** t
+                S_hat = S / bias_correction
+
+                if transform_name == "zscore":
+                    mu_S, var_S = state['mu_S'], state['var_S']
+                    mu_S.mul_(beta_phi).add_(S, alpha=(1 - beta_phi))
+                    centered = S - mu_S
+                    var_S.mul_(beta_phi).add_(centered * centered, alpha=(1 - beta_phi))
+                    mu_S_hat = mu_S / bias_correction
+                    sigma_S_hat = (var_S / bias_correction).clamp(min=0).sqrt()
+                else:
+                    mu_S_hat = sigma_S_hat = None
+
+                R = transform_fn(
+                    S_hat,
+                    gamma=group['gamma'],
+                    power_p=group['power_p'],
+                    tau=group['tau'],
+                    s=group['s'],
+                    mu_S_hat=mu_S_hat,
+                    sigma_S_hat=sigma_S_hat,
+                    zscore_k=group['zscore_k'],
+                    epsilon=eps,
+                )
+                R = R.clamp_(min=A, max=B)
+                state['R'] = R
+
+                m = state['m']
+                if t > 1:
+                    m.mul_(beta_m).add_(grad, alpha=(1 - beta_m))
+                else:
+                    m.copy_(grad)
+
+                p.addcmul_(m, R, value=-lr)
+
+        return loss

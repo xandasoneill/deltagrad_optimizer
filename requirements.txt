@@ -1,0 +1,9 @@
+torch>=1.10.0
+torchvision>=0.11.0
+numpy>=1.21.0
+joblib
+optuna>=2.10.0
+scipy
+matplotlib
+seaborn
+pytest
