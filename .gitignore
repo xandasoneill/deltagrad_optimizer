@@ -5,6 +5,7 @@ data/
 other_paper_versions/
 results/_smoke_runs/
 .pytest_cache/
+.ipynb_checkpoints/
 *.egg-info/
 build/
 dist/
