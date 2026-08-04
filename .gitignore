@@ -1,7 +1,7 @@
 __pycache__/
 testing.py
 trash/
-data/
+/data/
 other_paper_versions/
 results/_smoke_runs/
 .pytest_cache/
