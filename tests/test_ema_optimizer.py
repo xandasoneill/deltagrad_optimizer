@@ -124,3 +124,93 @@ def test_invalid_hyperparameters_raise():
         DeltaGradEMA(p, r_transform="not_a_real_transform")
     with pytest.raises(ValueError):
         DeltaGradEMA(p, A=0.9, B=0.1)
+    with pytest.raises(ValueError):
+        DeltaGradEMA(p, sample_every=0)
+    with pytest.raises(ValueError):
+        DeltaGradEMA(p, sample_size=0)
+
+
+# --------------------------------------------------------------------------
+# R-transform sampling (diagnostics for notebooks/analyze_results.ipynb Sec. 7)
+# --------------------------------------------------------------------------
+
+
+def test_sampling_off_by_default():
+    p = torch.nn.Parameter(torch.randn(4))
+    optimizer = DeltaGradEMA([p])
+    for _ in range(5):
+        p.grad = torch.randn_like(p)
+        optimizer.step()
+    assert optimizer.transform_samples == []
+
+
+def test_sampling_fires_on_schedule():
+    p = torch.nn.Parameter(torch.randn(10, 10))
+    optimizer = DeltaGradEMA([p], sample_every=3, sample_size=16)
+    for _ in range(10):
+        p.grad = torch.randn_like(p)
+        optimizer.step()
+
+    assert [c["step"] for c in optimizer.transform_samples] == [3, 6, 9]
+    for capture in optimizer.transform_samples:
+        assert capture["S_hat"].shape == capture["R"].shape == capture["param_index"].shape
+        assert capture["S_hat"].size <= 16
+
+
+def test_sampled_pairs_lie_on_the_clamped_transform():
+    """The whole point of the plot: a sampled R must be what the analytic curve
+    (post-clamp) says for its sampled S_hat, or the overlay would be a lie."""
+    torch.manual_seed(0)
+    p = torch.nn.Parameter(torch.randn(8, 8))
+    optimizer = DeltaGradEMA([p], r_transform="exp", gamma=2.0, A=0.1, B=1.0,
+                             sample_every=1, sample_size=64)
+    for _ in range(6):
+        p.grad = torch.randn_like(p) * 5
+        optimizer.step()
+
+    for capture in optimizer.transform_samples:
+        expected = torch.exp(-2.0 * torch.from_numpy(capture["S_hat"])).clamp(0.1, 1.0)
+        assert torch.allclose(expected, torch.from_numpy(capture["R"]), atol=1e-5)
+
+
+@pytest.mark.parametrize("r_transform", list(R_TRANSFORMS))
+def test_sampling_does_not_perturb_training(r_transform):
+    """Sampling is a diagnostic, so an identically-seeded run must land on exactly
+    the same parameters with it on as with it off -- including consuming no global
+    RNG (hence the torch.randn draws interleaved between steps, which would
+    desynchronise if the sampler drew from the global stream)."""
+    def run(sample_every):
+        torch.manual_seed(7)
+        p = torch.nn.Parameter(torch.randn(6, 5))
+        optimizer = DeltaGradEMA([p], lr=0.05, r_transform=r_transform,
+                                 sample_every=sample_every, sample_size=32)
+        for _ in range(12):
+            p.grad = torch.randn_like(p) * 2
+            optimizer.step()
+        return p.detach().clone()
+
+    assert torch.equal(run(None), run(2)), f"{r_transform}: sampling changed the trajectory"
+
+
+def test_transform_spec_round_trips_shape_parameters():
+    p = torch.nn.Parameter(torch.randn(3))
+    optimizer = DeltaGradEMA([p], r_transform="sigmoid", tau=0.3, s=0.05, A=0.2, B=0.9)
+    spec = optimizer.transform_spec()
+    assert spec["r_transform"] == "sigmoid"
+    assert spec["tau"] == 0.3 and spec["s"] == 0.05
+    assert spec["A"] == 0.2 and spec["B"] == 0.9
+
+
+def test_samples_stay_out_of_state_dict():
+    """Diagnostics must not ride along into checkpoints, and must not count
+    toward the Sec. 4.2 3d state-memory footprint."""
+    p = torch.nn.Parameter(torch.randn(5))
+    optimizer = DeltaGradEMA([p], sample_every=1)
+    p.grad = torch.randn_like(p)
+    optimizer.step()
+
+    assert optimizer.transform_samples, "expected a capture to have happened"
+    assert "sample_every" not in optimizer.param_groups[0]
+    assert not any(key.startswith("sample") or key == "S_hat"
+                   for key in optimizer.state[p])
+    assert "transform_samples" not in optimizer.state_dict()
