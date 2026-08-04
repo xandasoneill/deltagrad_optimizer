@@ -20,6 +20,17 @@ def build_optimizer(optimizer_key, params, **kwargs):
     return make_baseline_optimizer(optimizer_key, params, **kwargs)
 
 
+def load_tuned_kwargs(task_name, optimizer_key, root="best_params"):
+    """Reads the kwargs experiments/tune_hyperparams.py tuned for this task/optimizer
+    pair, or None if that pair was never tuned. Also accepts a hand-written pkl
+    holding a bare kwargs dict."""
+    path = os.path.join(root, task_name, f"{optimizer_key}.pkl")
+    if not os.path.isfile(path):
+        return None
+    payload = joblib.load(path)
+    return payload.get("best_params", payload)
+
+
 def run_benchmark(config, optimizer_key, n_runs=None, smoke=False, device=None,
                    optimizer_kwargs_override=None):
     """Runs `n_runs` seeded repetitions of `config` (an experiments.configs.
