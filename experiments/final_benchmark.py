@@ -32,11 +32,11 @@ def load_tuned_kwargs(task_name, optimizer_key, root="best_params"):
 
 
 def run_benchmark(config, optimizer_key, n_runs=None, smoke=False, device=None,
-                   optimizer_kwargs_override=None):
+                   optimizer_kwargs_override=None, grad_variance_every=10):
     """Runs `n_runs` seeded repetitions of `config` (an experiments.configs.
     ExperimentConfig) with the optimizer named by `optimizer_key`. Returns a
     results dict ready for joblib.dump / deltagrad.viz plotting."""
-    device = device or torch.device("cpu")
+    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_runs = n_runs if n_runs is not None else (1 if smoke else 5)
 
     batch_size = config.effective_batch_size(smoke)
@@ -64,7 +64,8 @@ def run_benchmark(config, optimizer_key, n_runs=None, smoke=False, device=None,
         scheduler = config.lr_scheduler_fn(optimizer) if config.lr_scheduler_fn else None
 
         result = train_fn(model, optimizer, optimizer_key, train_loader, test_loader,
-                           epochs=epochs, device=device, scheduler=scheduler)
+                           epochs=epochs, device=device, scheduler=scheduler,
+                           grad_variance_every=grad_variance_every)
 
         acc_history.append(result["acc_history"])
         loss_history.append(result["loss_history"])

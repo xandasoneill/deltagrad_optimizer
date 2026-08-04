@@ -1,5 +1,7 @@
 import argparse
 
+import torch
+
 from experiments.configs import TASK_REGISTRY, OPTIMIZER_KEYS
 from experiments.final_benchmark import run_benchmark, save_results, load_tuned_kwargs
 from experiments._cli import add_smoke_args
@@ -14,10 +16,18 @@ def main():
                         help="Use the kwargs from best_params/{task}/{optimizer}.pkl "
                              "(written by experiments.tune_hyperparams) instead of the "
                              "config's untuned defaults.")
+    parser.add_argument("--device", default=None, choices=["cpu", "cuda"],
+                        help="Default: cuda when available, else cpu.")
+    parser.add_argument("--grad-variance-every", type=int, default=10,
+                        help="Measure gradient variance (8 extra fwd/bwd passes on a "
+                             "subsample) every N batches; raise to cut instrumentation "
+                             "overhead, e.g. --grad-variance-every 50 (default: 10).")
     add_smoke_args(parser)
     args = parser.parse_args()
 
     config = TASK_REGISTRY[args.task]
+    device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    print(f"Using device: {device}")
 
     override = None
     if args.use_tuned:
@@ -31,7 +41,8 @@ def main():
         print(f"Using tuned hyperparameters: {override}")
 
     results = run_benchmark(config, args.optimizer, n_runs=args.n_runs, smoke=args.smoke,
-                             optimizer_kwargs_override=override)
+                             optimizer_kwargs_override=override, device=device,
+                             grad_variance_every=args.grad_variance_every)
     path = save_results(results)
 
     print(f"Saved results to {path}")
