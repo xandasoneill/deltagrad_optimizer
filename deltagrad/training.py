@@ -58,10 +58,14 @@ def _measure_grad_variance_and_R(model, optimizer, criterion, inputs, labels):
 
 def train_classifier(model, optimizer, optimizer_name, train_loader, test_loader,
                       epochs, device=torch.device("cpu"), grad_variance_every=10,
-                      criterion=None, scheduler=None):
+                      criterion=None, scheduler=None, epoch_callback=None):
     """Standard classification train/eval loop with grad-variance + R instrumentation.
     Returns a dict: acc_history, loss_history, r_values, variance_values,
-    total_net_time, time_stamps, experiment_start_time, device."""
+    total_net_time, time_stamps, experiment_start_time, device.
+
+    `epoch_callback(epoch, test_metric)` fires after each epoch's eval; raising from
+    it aborts training (how experiments/tune_hyperparams.py implements Optuna
+    pruning without this module having to know about Optuna)."""
     criterion = criterion or nn.CrossEntropyLoss()
     model.to(device)
 
@@ -119,6 +123,9 @@ def train_classifier(model, optimizer, optimizer_name, train_loader, test_loader
 
         print(f"[{optimizer_name}] Epoch {epoch + 1}/{epochs} | Loss: {epoch_loss:.4f} | Test Acc: {epoch_test_acc:.2f}%")
 
+        if epoch_callback is not None:
+            epoch_callback(epoch, epoch_test_acc)
+
     return {
         "acc_history": acc_history,
         "loss_history": loss_history,
@@ -133,10 +140,10 @@ def train_classifier(model, optimizer, optimizer_name, train_loader, test_loader
 
 def train_vae(model, optimizer, optimizer_name, train_loader, test_loader,
               epochs, device=torch.device("cpu"), grad_variance_every=10,
-              loss_fn=None, scheduler=None):
+              loss_fn=None, scheduler=None, epoch_callback=None):
     """Same shape/instrumentation as train_classifier, but for VAE reconstruction:
     `acc_history` holds mean test reconstruction loss per epoch (lower is better)
-    instead of accuracy."""
+    instead of accuracy. `epoch_callback` behaves as in train_classifier."""
     loss_fn = loss_fn or _default_vae_loss
 
     def criterion(outputs, targets):
@@ -196,6 +203,9 @@ def train_vae(model, optimizer, optimizer_name, train_loader, test_loader,
         loss_history.append(epoch_loss)
 
         print(f"[{optimizer_name}] Epoch {epoch + 1}/{epochs} | Train Loss: {epoch_loss:.4f} | Test Recon Loss: {epoch_test_loss:.4f}")
+
+        if epoch_callback is not None:
+            epoch_callback(epoch, epoch_test_loss)
 
     return {
         "acc_history": acc_history,
