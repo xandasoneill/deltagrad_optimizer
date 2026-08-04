@@ -32,7 +32,8 @@ def load_tuned_kwargs(task_name, optimizer_key, root="best_params"):
 
 
 def run_benchmark(config, optimizer_key, n_runs=None, smoke=False, device=None,
-                   optimizer_kwargs_override=None, grad_variance_every=10):
+                   optimizer_kwargs_override=None, grad_variance_every=10,
+                   sample_transform_every=None):
     """Runs `n_runs` seeded repetitions of `config` (an experiments.configs.
     ExperimentConfig) with the optimizer named by `optimizer_key`. Returns a
     results dict ready for joblib.dump / deltagrad.viz plotting."""
@@ -49,6 +50,7 @@ def run_benchmark(config, optimizer_key, n_runs=None, smoke=False, device=None,
     experiment_start_time_history = []
     seeds_used = []
     optimizer_hyperparameters = {}
+    transform_samples_history, transform_spec = [], None
 
     for _ in range(n_runs):
         seed = set_seed()
@@ -60,12 +62,23 @@ def run_benchmark(config, optimizer_key, n_runs=None, smoke=False, device=None,
         optimizer_hyperparameters = config.optimizer_kwargs_for(optimizer_key)
         if optimizer_kwargs_override:
             optimizer_hyperparameters.update(optimizer_kwargs_override)
+        # Only DeltaGradEMA has an R-transform to sample; asking any other
+        # optimizer for one would just be a TypeError from its constructor.
+        if sample_transform_every and optimizer_key == "ema":
+            optimizer_hyperparameters["sample_every"] = sample_transform_every
         optimizer = build_optimizer(optimizer_key, model.parameters(), **optimizer_hyperparameters)
         scheduler = config.lr_scheduler_fn(optimizer) if config.lr_scheduler_fn else None
 
         result = train_fn(model, optimizer, optimizer_key, train_loader, test_loader,
                            epochs=epochs, device=device, scheduler=scheduler,
                            grad_variance_every=grad_variance_every)
+
+        # Pulled off the optimizer rather than out of `result` so the sampling
+        # stays invisible to deltagrad/training.py, which has no reason to know
+        # any particular optimizer keeps diagnostics.
+        if getattr(optimizer, "transform_samples", None):
+            transform_samples_history.append(optimizer.transform_samples)
+            transform_spec = optimizer.transform_spec()
 
         acc_history.append(result["acc_history"])
         loss_history.append(result["loss_history"])
@@ -87,6 +100,8 @@ def run_benchmark(config, optimizer_key, n_runs=None, smoke=False, device=None,
         "r_history": r_history,
         "variance_history": variance_history,
         "all_timestamps": time_stamps_history,
+        "transform_samples": transform_samples_history,
+        "transform_spec": transform_spec,
         "optimizer_hyperparameters": optimizer_hyperparameters,
         "all_total_times": total_net_time_history,
         "seeds": seeds_used,

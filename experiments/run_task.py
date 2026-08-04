@@ -22,12 +22,20 @@ def main():
                         help="Measure gradient variance (8 extra fwd/bwd passes on a "
                              "subsample) every N batches; raise to cut instrumentation "
                              "overhead, e.g. --grad-variance-every 50 (default: 10).")
+    parser.add_argument("--sample-transform-every", type=int, default=None, metavar="N",
+                        help="Record (S_hat, R) pairs every N optimizer steps so the "
+                             "R-transform's operating range can be plotted against its "
+                             "analytic curve (--optimizer ema only; off by default).")
     add_smoke_args(parser)
     args = parser.parse_args()
 
     config = TASK_REGISTRY[args.task]
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
     print(f"Using device: {device}")
+
+    if args.sample_transform_every and args.optimizer != "ema":
+        parser.error("--sample-transform-every only applies to --optimizer ema "
+                     "(it is the only optimizer with an R-transform to sample).")
 
     override = None
     if args.use_tuned:
@@ -42,7 +50,8 @@ def main():
 
     results = run_benchmark(config, args.optimizer, n_runs=args.n_runs, smoke=args.smoke,
                              optimizer_kwargs_override=override, device=device,
-                             grad_variance_every=args.grad_variance_every)
+                             grad_variance_every=args.grad_variance_every,
+                             sample_transform_every=args.sample_transform_every)
     path = save_results(results)
 
     print(f"Saved results to {path}")
