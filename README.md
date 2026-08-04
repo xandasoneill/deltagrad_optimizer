@@ -28,7 +28,8 @@ experiments/          runnable scripts + configs (one ExperimentConfig per paper
   run_task.py            generic CLI: --task <name> --optimizer <name> [--smoke]
   run_cifar100_lr_stress.py   1x/3x/10x LR-multiplier stress test
   ablation_*.py          state-memory footprint / wall-clock overhead / beta_phi sweep
-  tune_hyperparams.py    Optuna tuning (CIFAR-100/ConvNet, per the paper's LR-stress setup)
+  sweep_r_transforms.py  runs one task under all 6 DeltaGrad-EMA R-transforms (Sec 3.2)
+  tune_hyperparams.py    Optuna tuning for any optimizer against any TASK_REGISTRY task
   analyse.py             loads two saved results .pkl files and generates comparison figures
   extended/              ResNet+ImageNet-1K / NanoGPT scaffolds (Sec 4.2 -- not yet implemented)
 
@@ -38,7 +39,11 @@ results/              results/<task>/<optimizer>_results.pkl + figures, per new 
                       results/legacy/ holds everything from before this reorg
 best_params/          Optuna-tuned hyperparameters (best_params/windowed/ = current schema)
 optuna_studies/       full Optuna study objects
-notebooks/            colab_bootstrap.ipynb -- Drive-mount + run experiments on Colab GPU
+notebooks/            colab_bootstrap.ipynb  -- Drive-mount + run experiments on Colab GPU
+                      analyze_results.ipynb  -- loads results/ and works through the plan's
+                                                claims: variance reduction, the R_t mechanism
+                                                and its 6 transforms, seed stability,
+                                                significance, overhead, noise memorization
 paper/                extended abstract + poster PDFs
 deltagradpaperplan.pdf   the spec this implementation follows
 ```
@@ -96,9 +101,30 @@ python -m experiments.run_cifar100_lr_stress --optimizer windowed      # 1x/3x/1
 python -m experiments.ablation_state_memory                            # (K+1)d / 3d / 2d footprint check
 python -m experiments.ablation_wallclock --optimizers windowed ema adam
 python -m experiments.ablation_beta_phi_sweep
-python -m experiments.tune_hyperparams                                  # Optuna, CIFAR-100/ConvNet5Layer
+python -m experiments.sweep_r_transforms --task mnist_logreg           # all 6 Sec 3.2 R-transforms
+python -m experiments.tune_hyperparams --task cifar100_noise_20        # Optuna, all 7 optimizers
 python -m experiments.analyse --baseline-results <path> --deltagrad-results <path>
 ```
+
+Tuned hyperparameters are written to `best_params/<task>/<optimizer>.pkl`; pass
+`--use-tuned` to `run_task.py` to benchmark with them instead of the config defaults.
+
+### Analysing results
+
+`notebooks/analyze_results.ipynb` reads `results/<task>/<optimizer>_results.pkl` and
+covers each claim in the plan in its own section, for any number of optimizers at
+once. Two optional instrumentation flags feed it:
+
+```bash
+# throttle the gradient-variance probe (8 extra fwd/bwd passes per measurement)
+python -m experiments.run_task --task cifar100_noise_20 --optimizer windowed --grad-variance-every 50
+
+# record DeltaGrad-EMA's (S_hat, R) operating points for the Sec 3.2 transform plots
+python -m experiments.run_task --task mnist_logreg --optimizer ema --sample-transform-every 50
+```
+
+Sampling is off by default, strided rather than random so it draws no global RNG,
+and verified in `tests/` to leave an identically-seeded run bit-for-bit unchanged.
 
 Run the test suite with:
 
