@@ -12,6 +12,9 @@ Results land in `best_params/{task}/{optimizer}.pkl`, which
     python -m experiments.tune_hyperparams --task cifar100_noise_20            # all 7 optimizers
     python -m experiments.tune_hyperparams --task mnist_vae --optimizer ema adam
     python -m experiments.tune_hyperparams --task cifar10_conv --optimizer ema --fixed r_transform=sigmoid
+    python -m experiments.tune_hyperparams --task cifar100_noise_20 --resume    # survives interruption
+
+notebooks/tune_hyperparams.ipynb drives the same functions from a notebook.
 """
 
 import argparse
@@ -21,6 +24,7 @@ import os
 import joblib
 import optuna
 import torch
+from optuna.trial import TrialState
 from torch.utils.data import DataLoader, random_split
 
 from deltagrad.training import train_classifier, train_vae
@@ -175,9 +179,26 @@ def objective(trial, config, optimizer_key, base_kwargs, epochs, device,
     return result["acc_history"][-1]
 
 
+def sqlite_storage(task_name, study_root="optuna_studies"):
+    """Optuna storage URL for `task_name` -- one SQLite database per task, holding
+    one study per optimizer. Creates the directory if it doesn't exist yet."""
+    directory = os.path.join(study_root, task_name)
+    os.makedirs(directory, exist_ok=True)
+    return f"sqlite:///{os.path.join(directory, 'tuning.db')}"
+
+
 def tune_optimizer(config, optimizer_key, n_trials, epochs, device, seed,
-                    fixed_kwargs, loaders):
-    """Runs one Optuna study. Returns (study, base_kwargs, direction)."""
+                    fixed_kwargs, loaders, *, storage=None, study_name=None,
+                    pruner=None, callbacks=None, show_progress_bar=False):
+    """Runs one Optuna study. Returns (study, base_kwargs, direction).
+
+    Without `storage` the study lives in memory and dies with the process. Pass one
+    (see `sqlite_storage`) to persist it instead, so a tuning run killed halfway --
+    a dropped Colab session, a Ctrl-C -- resumes from the trials it already
+    finished. `n_trials` then means the study's *total* trial budget rather than
+    "this many more", which makes re-running a finished study a no-op instead of
+    doubling its cost.
+    """
     # config defaults (e.g. mnist_logreg's weight_decay) < --fixed < what Optuna suggests.
     base_kwargs = config.optimizer_kwargs_for(optimizer_key)
     base_kwargs.update(fixed_kwargs)
@@ -188,11 +209,25 @@ def tune_optimizer(config, optimizer_key, n_trials, epochs, device, seed,
 
     train_loader, val_loader, shuffle_generator = loaders
     study = optuna.create_study(direction=direction,
-                                 sampler=optuna.samplers.TPESampler(seed=seed))
-    study.optimize(
-        lambda trial: objective(trial, config, optimizer_key, base_kwargs, epochs,
-                                 device, train_loader, val_loader, shuffle_generator, seed),
-        n_trials=n_trials)
+                                 sampler=optuna.samplers.TPESampler(seed=seed),
+                                 pruner=pruner,
+                                 storage=storage,
+                                 study_name=study_name or f"{config.name}/{optimizer_key}",
+                                 load_if_exists=storage is not None)
+
+    if storage is not None:
+        # Pruned trials count as spent budget: they cost training time and the
+        # sampler learns from them, so charging for them is what makes a resumed
+        # run cost the same as an uninterrupted one.
+        spent = sum(trial.state in (TrialState.COMPLETE, TrialState.PRUNED)
+                    for trial in study.trials)
+        n_trials = max(0, n_trials - spent)
+
+    if n_trials:
+        study.optimize(
+            lambda trial: objective(trial, config, optimizer_key, base_kwargs, epochs,
+                                     device, train_loader, val_loader, shuffle_generator, seed),
+            n_trials=n_trials, callbacks=callbacks, show_progress_bar=show_progress_bar)
     return study, base_kwargs, direction
 
 
@@ -256,6 +291,10 @@ def main():
                         help="Default: cuda when available, else cpu.")
     parser.add_argument("--fixed", nargs="+", default=[], metavar="KEY=VALUE",
                         help="Pin optimizer kwargs instead of searching them, e.g. r_transform=sigmoid.")
+    parser.add_argument("--resume", action="store_true",
+                        help="Keep the studies in optuna_studies/{task}/tuning.db so an "
+                             "interrupted run picks up where it stopped. --n-trials is then "
+                             "the total budget per optimizer, not the number of extra trials.")
     parser.add_argument("--smoke", action="store_true",
                         help="Fast wiring check: the task's smoke config plus 2 trials.")
     args = parser.parse_args()
@@ -275,14 +314,23 @@ def main():
     # IMDB's re-tokenization).
     loaders = train_val_loaders(config, batch_size, loader_kwargs, args.val_fraction, args.seed)
 
+    storage = sqlite_storage(args.task) if args.resume else None
+
     print(f"Tuning {args.task} on {device} | {epochs} epochs | batch {batch_size} | "
           f"{n_trials} trials/optimizer | {len(loaders[0].dataset)} train / "
-          f"{len(loaders[1].dataset)} val examples")
+          f"{len(loaders[1].dataset)} val examples"
+          + (f" | resumable ({storage})" if storage else ""))
 
     for optimizer_key in args.optimizer:
         print(f"\n=== {optimizer_key} ===")
         study, base_kwargs, direction = tune_optimizer(
-            config, optimizer_key, n_trials, epochs, device, args.seed, fixed_kwargs, loaders)
+            config, optimizer_key, n_trials, epochs, device, args.seed, fixed_kwargs, loaders,
+            storage=storage)
+        # Every trial pruned or crashed means there is no "best" to write, and
+        # study.best_value would raise a considerably less helpful error.
+        if not any(trial.state == TrialState.COMPLETE for trial in study.trials):
+            print(f"{optimizer_key}: no trial ran to completion -- nothing saved.")
+            continue
         path = save_study(study, config, optimizer_key, base_kwargs, direction, epochs, batch_size)
         print(f"{optimizer_key}: best value={study.best_value:.4f} ({direction}) "
               f"params={study.best_params}\n  -> {path}")

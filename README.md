@@ -40,6 +40,8 @@ results/              results/<task>/<optimizer>_results.pkl + figures, per new 
 best_params/          Optuna-tuned hyperparameters (best_params/windowed/ = current schema)
 optuna_studies/       full Optuna study objects
 notebooks/            colab_bootstrap.ipynb  -- Drive-mount + run experiments on Colab GPU
+                      tune_hyperparams.ipynb -- pick a task, run Optuna over the optimizers
+                                                you care about, write best_params/
                       analyze_results.ipynb  -- loads results/ and works through the plan's
                                                 claims: variance reduction, the R_t mechanism
                                                 and its 6 transforms, seed stability,
@@ -108,6 +110,19 @@ python -m experiments.analyse --baseline-results <path> --deltagrad-results <pat
 
 Tuned hyperparameters are written to `best_params/<task>/<optimizer>.pkl`; pass
 `--use-tuned` to `run_task.py` to benchmark with them instead of the config defaults.
+
+### Tuning hyperparameters
+
+`notebooks/tune_hyperparams.ipynb` is the interactive front end for the same tuner:
+pick a task, pick optimizers, see the search space and an estimate of the wall clock
+before committing to it, then watch the trials land. Add `--resume` (CLI) or leave
+`RESUME = True` (notebook) to keep each study in `optuna_studies/<task>/tuning.db`,
+so an interrupted sweep continues from its finished trials instead of restarting;
+`--n-trials` is then the study's total budget rather than a number of extra trials.
+
+Scoring uses a validation split carved out of the *training* set -- the task's test
+loader is never built during tuning, so tuned hyperparameters cannot leak test-set
+information into the benchmark that later reports on them.
 
 ### Analysing results
 
